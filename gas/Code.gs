@@ -24,6 +24,9 @@
 // ---------------------------------------------------------------- 入口
 
 function doPost(e) {
+  // エディタの「実行」で doPost を選んで押すと、届いたリクエストが無いので e が空になる。
+  // そのときは何をすればよいかを出す（LINE や入力ページから呼ばれたときは必ず e がある）
+  if (!e) throw new Error('doPost はエディタから実行するものではありません。LINE と入力ページから呼ばれます。最初の準備なら、関数「setup」を選んで実行してください');
   const body = JSON.parse((e.postData && e.postData.contents) || '{}');
   // LINE からの Webhook
   if (body.events) {
