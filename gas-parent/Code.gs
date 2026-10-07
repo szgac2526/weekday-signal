@@ -26,16 +26,23 @@ function doGet() {
 function getDashboard(ym, userId) {
   const ss = openSheet_();
   const records = rows_(ss, SHEET_RECORDS).map(rowToObj_).map(plain_);
-  const users = rows_(ss, SHEET_USERS).map(function (r) { return { userId: r[0], name: r[1] || '（名前なし）' }; })
-    .filter(function (u) { return records.some(function (r) { return r.user_id === u.userId; }); });
   const today = jstDate_(new Date());
   ym = /^\d{4}-\d{2}$/.test(ym || '') ? ym : today.slice(0, 7);
+  const giftRows = rows_(ss, SHEET_GIFTS);
+  // 兄弟の切り替えに、その月のスタンプ数とギフトの状態を載せる。選んでいない子の「未贈呈」を見落とさないため
+  const users = rows_(ss, SHEET_USERS).map(function (r) { return { userId: r[0], name: r[1] || '（名前なし）' }; })
+    .filter(function (u) { return records.some(function (r) { return r.user_id === u.userId; }); })
+    .map(function (u) {
+      const s = monthStamps_(doneDates_(records, u.userId), ym, prop_('STAMP_GOAL'));
+      const g = giftRows.filter(function (r) { return String(r[0]) === ym && r[1] === u.userId; })[0];
+      return { userId: u.userId, name: u.name, count: s.count, goal: s.goal, giftStatus: g ? String(g[6]) : '' };
+    });
   const uid = userId || (users[0] && users[0].userId) || '';
   const mine = records.filter(function (r) { return r.user_id === uid; });
   const month = mine.filter(function (r) { return String(r.date).slice(0, 7) === ym; })
     .sort(function (a, b) { return a.date < b.date ? 1 : -1; });
   const st = monthStamps_(doneDates_(mine, uid), ym, prop_('STAMP_GOAL'));
-  const gift = rows_(ss, SHEET_GIFTS).filter(function (r) { return String(r[0]) === ym && r[1] === uid; })
+  const gift = giftRows.filter(function (r) { return String(r[0]) === ym && r[1] === uid; })
     .map(function (r) { return { status: r[6], achievedAt: plainCell_(r[5]), sentAt: plainCell_(r[7]) }; })[0] || null;
   const dones = mine.filter(function (r) { return r.night_at; }).map(function (r) { return r.date; });
   return {

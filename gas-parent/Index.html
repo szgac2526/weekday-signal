@@ -23,6 +23,12 @@ header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
 header h1 { font-size: 20px; margin: 0; letter-spacing: .02em; }
 header .who { margin-left: auto; font-size: 12px; color: var(--muted); }
 .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.kids { display: flex; gap: 6px; flex-wrap: wrap; }
+@media (max-width: 520px) { .kids { flex-basis: 100%; } }
+.kid { display: inline-flex; gap: 8px; align-items: baseline; }
+.kid span { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.kid[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.kid[aria-pressed="true"] span { color: inherit; opacity: .9; }
 select, button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 6px 12px; min-height: 36px; }
 button { cursor: pointer; }
 button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -187,11 +193,13 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
   }
 
   function render() {
-    const users = D.users.map((u) => `<option value="${esc(u.userId)}"${u.userId === D.userId ? " selected" : ""}>${esc(u.name)}</option>`).join("");
+    // 兄弟は並べて見せる。選んでいない子のスタンプ数と「🎁 未贈呈」もここで目に入る
+    const users = D.users.map((u) => `<button type="button" class="kid" data-uid="${esc(u.userId)}" aria-pressed="${u.userId === D.userId}">
+      <b>${esc(u.name)}</b><span>${u.count}/${u.goal}${u.giftStatus === "未贈呈" ? " 🎁" : u.giftStatus === "贈呈済み" ? " ✓" : ""}</span></button>`).join("");
     app.innerHTML = `
       <header><h1>WEEKDAY SIGNAL</h1>
         <div class="controls">
-          ${D.users.length > 1 ? `<select id="user" aria-label="誰の記録か">${users}</select>` : `<span>${esc((D.users[0] || {}).name || "")}</span>`}
+          ${D.users.length > 1 ? `<div class="kids" role="group" aria-label="誰の記録か">${users}</div>` : `<span>${esc((D.users[0] || {}).name || "")}</span>`}
           <button type="button" id="prev" aria-label="前の月">‹</button><span class="month">${D.ym.slice(0, 4)}年${Number(D.ym.slice(5))}月</span>
           <button type="button" id="next" aria-label="次の月">›</button></div>
         <span class="who">${esc(D.viewer)} で表示中</span></header>
@@ -200,10 +208,10 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
       <div class="two">${bars("よく選んだアンテナ", count(D.rows, "antenna"))}${bars("今日あったもの", count(D.rows, "feelings"))}</div>
       ${days()}
       <p class="foot">元のデータは <a href="${esc(D.sheetUrl)}" target="_blank" rel="noopener">スプレッドシート</a>（Excel が必要なら「ファイル → ダウンロード → Microsoft Excel」）</p>`;
-    const uid = () => (document.getElementById("user") || {}).value || D.userId;
+    const uid = () => D.userId;
     document.getElementById("prev").onclick = () => load(shiftYm(D.ym, -1), uid());
     document.getElementById("next").onclick = () => load(shiftYm(D.ym, 1), uid());
-    const sel = document.getElementById("user"); if (sel) sel.onchange = () => load(D.ym, sel.value);
+    app.querySelectorAll(".kid").forEach((b) => { b.onclick = () => { if (b.dataset.uid !== D.userId) load(D.ym, b.dataset.uid); }; });
     const sent = document.getElementById("sent");
     if (sent) sent.onclick = () => {
       if (!window.confirm || !window.confirm("ギフトを贈ったことにして、本人に知らせます。よろしいですか？")) return;
