@@ -72,6 +72,37 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
 .day .key { font-size: 15.5px; font-weight: 700; }
 .day .meta { font-size: 13px; color: var(--muted); }
 .day .treasure { font-size: 14.5px; }
+nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+nav.tabs button { border-radius: 999px; }
+nav.tabs button[aria-selected="true"] { background: var(--ink); color: var(--card); border-color: var(--ink); font-weight: 700; }
+.note { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+.muted { color: var(--muted); font-size: 12.5px; }
+.flash { background: #e7f6ec; color: #1f6b3a; border-radius: 12px; padding: 10px 14px; margin: 0; font-weight: 700; }
+@media (prefers-color-scheme: dark) { .flash { background: #1c3326; color: #8fdcaa; } }
+.f { display: grid; gap: 4px; margin-bottom: 12px; min-width: 0; }
+.f > span { font-size: 13px; font-weight: 700; }
+.f small { font-size: 12px; color: var(--muted); }
+input[type="text"], input[type="number"], textarea, select { font: inherit; width: 100%; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 8px 10px; }
+textarea { resize: vertical; line-height: 1.5; }
+.chk { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; min-height: 36px; margin-right: 16px; }
+.row { display: flex; flex-wrap: wrap; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 12px; }
+.kidrow { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(160px, 1.4fr) auto; gap: 0 12px; align-items: end; border-bottom: 1px solid var(--line); padding-top: 8px; }
+@media (max-width: 560px) { .kidrow { grid-template-columns: 1fr; } }
+.actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 12px; }
+.actions.sticky { position: sticky; bottom: 8px; margin: 0; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; padding: 6px 20px; }
+.lines { display: grid; gap: 8px; }
+.lrow { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; border-bottom: 1px solid var(--line); padding: 6px 0; }
+.lrow button { margin-left: auto; }
+.days5 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.daycard h2 { display: flex; align-items: center; gap: 8px; color: var(--ink); }
+.daycard .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--dc); }
+.daycard { border-top: 4px solid var(--dc); }
+.daycard[data-day="mon"] { --dc: #e0566a; } .daycard[data-day="tue"] { --dc: #3b8bd0; } .daycard[data-day="wed"] { --dc: #3f9f5c; }
+.daycard[data-day="thu"] { --dc: #d99a1e; } .daycard[data-day="fri"] { --dc: #7b62c9; }
+.day .extra { white-space: pre-line; }
+.daycard textarea { min-height: 7.5em; }
 .empty { color: var(--muted); text-align: center; padding: 24px 0; }
 .err { color: #b42318; }
 .foot { font-size: 12px; color: var(--muted); }
@@ -94,9 +125,8 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
     if (!hasGas) return Promise.resolve(window.SAMPLE ? window.SAMPLE(fn, ...args) : null);
     return new Promise((ok, ng) => google.script.run.withSuccessHandler(ok).withFailureHandler(ng)[fn](...args));
   }
-  function load(ym, uid) {
-    return call("getDashboard", ym, uid).then((d) => { D = d; render(); })
-      .catch((e) => { app.innerHTML = `<p class="err">開けませんでした：${esc(e.message || e)}</p>`; });
+  function load(ym, cid) {
+    return call("getDashboard", ym, cid).then((d) => { D = d; render(); }).catch(showErr);
   }
 
   // ---------------------------------------------------------------- 計算
@@ -188,37 +218,180 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
         ${r.quest ? `<div class="meta">QUEST：${esc(r.quest)}${r.antenna ? `　アンテナ：${esc(r.antenna)}` : ""}</div>` : ""}
         ${r.body || r.mood || r.energy ? `<div class="meta">体 ${esc(r.body || "-")}・気分 ${esc(r.mood || "-")}・元気 ${esc(r.energy || "-")}${r.motto ? `　意気込み：${esc(r.motto)}` : ""}</div>` : ""}
         ${r.feelings ? `<div class="meta">今日あったもの：${esc(r.feelings)}</div>` : ""}
-        ${r.week_best || r.next_self || r.week_reflection ? `<div class="meta">今週の宝物：${esc(r.week_best)}／来週知りたい自分：${esc(r.next_self)}／ふりかえり：${esc(r.week_reflection)}</div>` : ""}
+        ${r.extra ? `<div class="meta extra">${esc(r.extra)}</div>` : ""}
       </article>`).join("")}</div></div>`;
   }
 
+  // ---------------------------------------------------------------- 画面の枠（タブ）
+  // 記録を見る人と、設定を変える人は同じ親。タブで分け、設定は開いたときに読む
+  const TABS = [["records", "記録"], ["kids", "子どもと LINE"], ["questions", "設問"], ["reward", "ごほうび"]];
+  let TAB = "records", A = null;
+  function shell(inner) {
+    const viewer = (D && D.viewer) || (A && A.viewer) || "";
+    app.innerHTML = `<header><h1>WEEKDAY SIGNAL</h1>
+        <nav class="tabs" role="tablist">${TABS.map(([k, t]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${k === TAB}">${t}</button>`).join("")}</nav>
+        <span class="who">${esc(viewer)} で表示中</span></header>${inner}`;
+    app.querySelectorAll("[data-tab]").forEach((b) => { b.onclick = () => openTab(b.dataset.tab); });
+  }
+  function openTab(tab) {
+    TAB = tab;
+    if (tab === "records") return D ? render() : load("", "");
+    if (A) return renderAdmin();
+    shell(`<p class="empty">読み込み中…</p>`);
+    call("getAdmin").then((a) => { A = a; renderAdmin(); }).catch(showErr);
+  }
+  const showErr = (e) => shell(`<p class="err">開けませんでした：${esc(e.message || e)}</p>`);
+
+  // ---------------------------------------------------------------- 記録タブ
   function render() {
+    if (TAB !== "records") return;
     // 兄弟は並べて見せる。選んでいない子のスタンプ数と「🎁 未贈呈」もここで目に入る
-    const users = D.users.map((u) => `<button type="button" class="kid" data-uid="${esc(u.userId)}" aria-pressed="${u.userId === D.userId}">
-      <b>${esc(u.name)}</b><span>${u.count}/${u.goal}${u.giftStatus === "未贈呈" ? " 🎁" : u.giftStatus === "贈呈済み" ? " ✓" : ""}</span></button>`).join("");
-    app.innerHTML = `
-      <header><h1>WEEKDAY SIGNAL</h1>
-        <div class="controls">
-          ${D.users.length > 1 ? `<div class="kids" role="group" aria-label="誰の記録か">${users}</div>` : `<span>${esc((D.users[0] || {}).name || "")}</span>`}
+    const kids = D.children.map((c) => `<button type="button" class="kid" data-cid="${esc(c.id)}" aria-pressed="${c.id === D.childId}">
+      <b>${esc(c.name)}</b><span>${c.count}/${c.goal}${c.giftStatus === "未贈呈" ? " 🎁" : c.giftStatus === "贈呈済み" ? " ✓" : ""}</span></button>`).join("");
+    if (!D.children.length) {
+      shell(`<div class="card"><p class="empty">まだ子どもが登録されていません。「子どもと LINE」タブで名前を足してください。</p></div>`);
+      return;
+    }
+    shell(`<div class="controls">
+          ${D.children.length > 1 ? `<div class="kids" role="group" aria-label="誰の記録か">${kids}</div>` : `<b>${esc(D.children[0].name)}</b>`}
           <button type="button" id="prev" aria-label="前の月">‹</button><span class="month">${D.ym.slice(0, 4)}年${Number(D.ym.slice(5))}月</span>
           <button type="button" id="next" aria-label="次の月">›</button></div>
-        <span class="who">${esc(D.viewer)} で表示中</span></header>
       ${giftBox()}${tiles()}
       <div class="two">${calendar()}${trend()}</div>
       <div class="two">${bars("よく選んだアンテナ", count(D.rows, "antenna"))}${bars("今日あったもの", count(D.rows, "feelings"))}</div>
       ${days()}
-      <p class="foot">元のデータは <a href="${esc(D.sheetUrl)}" target="_blank" rel="noopener">スプレッドシート</a>（Excel が必要なら「ファイル → ダウンロード → Microsoft Excel」）</p>`;
-    const uid = () => D.userId;
-    document.getElementById("prev").onclick = () => load(shiftYm(D.ym, -1), uid());
-    document.getElementById("next").onclick = () => load(shiftYm(D.ym, 1), uid());
-    app.querySelectorAll(".kid").forEach((b) => { b.onclick = () => { if (b.dataset.uid !== D.userId) load(D.ym, b.dataset.uid); }; });
+      <p class="foot">元のデータは <a href="${esc(D.sheetUrl)}" target="_blank" rel="noopener">スプレッドシート</a>（Excel が必要なら「ファイル → ダウンロード → Microsoft Excel」）</p>`);
+    document.getElementById("prev").onclick = () => load(shiftYm(D.ym, -1), D.childId);
+    document.getElementById("next").onclick = () => load(shiftYm(D.ym, 1), D.childId);
+    app.querySelectorAll(".kid").forEach((b) => { b.onclick = () => { if (b.dataset.cid !== D.childId) load(D.ym, b.dataset.cid); }; });
     const sent = document.getElementById("sent");
     if (sent) sent.onclick = () => {
       if (!window.confirm || !window.confirm("ギフトを贈ったことにして、本人に知らせます。よろしいですか？")) return;
       sent.disabled = true; sent.textContent = "記録中…";
-      call("markGiftSent", D.ym, D.userId).then((d) => { D = d; render(); })
+      call("markGiftSent", D.ym, D.childId).then((d) => { D = d; render(); })
         .catch((e) => { sent.disabled = false; sent.textContent = "贈った"; alert(e.message || e); });
     };
+  }
+
+  // ---------------------------------------------------------------- 管理タブ
+  function renderAdmin() {
+    if (TAB === "kids") return kidsTab();
+    if (TAB === "questions") return questionsTab();
+    if (TAB === "reward") return rewardTab();
+  }
+  /** 保存ボタンの共通処理。成功したら管理データを差し替えて描き直し、記録タブは次に開くとき読み直す */
+  function save(btn, fn, args, done) {
+    const label = btn.textContent;
+    btn.disabled = true; btn.textContent = "保存中…";
+    call(fn, ...args).then((a) => { A = a; D = null; renderAdmin(); flash(done); })
+      .catch((e) => { btn.disabled = false; btn.textContent = label; alert(e.message || e); });
+  }
+  function flash(msg) {
+    const el = document.getElementById("flash");
+    if (el) { el.textContent = msg; el.hidden = false; }
+  }
+  const flashBox = `<p id="flash" class="flash" role="status" hidden></p>`;
+
+  function kidsTab() {
+    const row = (c, i) => `<div class="kidrow" data-i="${i}" data-id="${esc(c.id || "")}">
+        <label class="f"><span>名前</span><input type="text" name="name" value="${esc(c.name)}" maxlength="20" placeholder="例：たかまさ"></label>
+        <label class="f"><span>書くときの LINE</span><select name="line"><option value="">（まだつながない）</option>
+          ${A.lines.map((l) => `<option value="${esc(l.id)}"${l.id === c.lineUserId ? " selected" : ""}>${esc(l.name || "（名前なし）")}${l.active ? "" : "（止めている）"}</option>`).join("")}</select></label>
+        <label class="chk"><input type="checkbox" name="active"${c.active !== false ? " checked" : ""}> 使う</label>
+      </div>`;
+    const linked = (id) => A.children.filter((c) => c.lineUserId === id).map((c) => c.name);
+    shell(`${flashBox}<div class="card"><h2>子ども</h2>
+        <p class="note">名前は LINE のメッセージやスタンプカードに出ます。<b>兄弟で1つの LINE を使うなら、2人とも同じ LINE を選んでください。</b>入力ページの上に「書く人」が出て、切り替えて書けます。<br>
+        使わなくなった子は「使う」を外します（記録は残ります。消す操作はありません）。</p>
+        <div id="kidrows">${(A.children.length ? A.children : [{ name: "", active: true }]).map(row).join("")}</div>
+        <div class="actions"><button type="button" id="addkid">＋ 子どもを足す</button><button type="button" class="primary" id="savekids">保存</button></div></div>
+      <div class="card"><h2>友だち追加された LINE</h2>
+        ${A.lines.length ? `<div class="lines">${A.lines.map((l) => `<div class="lrow"><b>${esc(l.name || "（名前なし）")}</b>
+            <span class="muted">${esc(String(l.since || "").slice(0, 10))} 追加${linked(l.id).length ? "・" + linked(l.id).map(esc).join("、") + " が使う" : "・まだ誰ともつながっていない"}</span>
+            <button type="button" data-line="${esc(l.id)}" data-active="${l.active}">${l.active ? "止める" : "再開する"}</button></div>`).join("")}</div>
+          <p class="note">止めた LINE には声かけが届かず、入力ページも開けません（試しに友だち追加した親の LINE など）。</p>`
+          : `<p class="empty">まだ誰も公式アカウントを友だち追加していません。友だち追加すると、ここに出てきます。</p>`}</div>`);
+    document.getElementById("addkid").onclick = () => {
+      const box = document.getElementById("kidrows");
+      box.insertAdjacentHTML("beforeend", row({ name: "", active: true }, box.children.length));
+      box.lastElementChild.querySelector("input").focus();
+    };
+    document.getElementById("savekids").onclick = (ev) => {
+      const list = [...document.querySelectorAll(".kidrow")].map((r) => ({
+        id: r.dataset.id || undefined, name: r.querySelector("[name=name]").value,
+        lineUserId: r.querySelector("[name=line]").value, active: r.querySelector("[name=active]").checked,
+      }));
+      save(ev.target, "saveChildren", [list], "保存しました。");
+    };
+    app.querySelectorAll("[data-line]").forEach((b) => {
+      b.onclick = () => save(b, "setLineActive", [b.dataset.line, b.dataset.active !== "true"], "変えました。");
+    });
+  }
+
+  // 設問の入力欄。name に「どこの値か」を書いておき、保存のときに同じ形に組み直す
+  const tx = (path, label, value, hint) => `<label class="f"><span>${label}</span><input type="text" data-path="${path}" value="${esc(value)}">${hint ? `<small>${hint}</small>` : ""}</label>`;
+  const ls = (path, label, list, hint) => `<label class="f"><span>${label}</span><textarea data-path="${path}" data-list rows="${Math.min(10, Math.max(3, list.length + 1))}">${esc(list.join("\n"))}</textarea><small>${hint || "1行に1つ"}</small></label>`;
+  const bx = (path, label, on) => `<label class="chk"><input type="checkbox" data-path="${path}"${on ? " checked" : ""}> ${label}</label>`;
+
+  function questionsTab() {
+    const q = A.questions;
+    const dayCard = (k) => {
+      const d = q.days[k];
+      return `<div class="card daycard" data-day="${k}"><h2><span class="dot"></span>${WD[k]}曜日</h2>
+        ${tx(`days.${k}.name`, "名前", d.name)}${tx(`days.${k}.theme`, "テーマ", d.theme)}${tx(`days.${k}.question`, "問いかけ", d.question)}
+        ${ls(`days.${k}.quests`, "QUEST の候補", d.quests, "1行に1つ。<b>空にすると</b>「" + esc(q.quest.before) + "＿" + esc(q.quest.after) + "」と自由に書く欄になります")}
+        ${ls(`days.${k}.antenna`, "この曜日だけのアンテナ", d.antenna, "1行に1つ。<b>空なら共通のアンテナ</b>を使います")}
+        ${ls(`days.${k}.extra_night`, "夜に足す質問", d.extra_night, "1行に1つ（5つまで）。例：今週の一番の宝物は？")}</div>`;
+    };
+    shell(`${flashBox}<div class="card"><h2>設問</h2>
+        <p class="note">保存すると、<b>次に入力ページを開いたときから</b>変わります。今は${A.customized ? "<b>変更したもの</b>" : "シートどおり（初期値）"}を使っています。<br>
+        すでに書いた記録は、そのとき選んだ言葉のまま残ります。</p></div>
+      <div class="card"><h2>朝（共通）</h2>
+        <div class="grid3">${q.condition.items.map((it, i) => tx(`condition.items.${i}.label`, `${i + 1}つ目の数字`, it.label) + tx(`condition.items.${i}.sub`, "ふりがな", it.sub)).join("")}</div>
+        ${tx("antenna.label", "アンテナの見出し", q.antenna.label)}
+        ${ls("antenna.options", "アンテナ（共通）", q.antenna.options)}
+        <div class="row">${bx("antenna.multi", "アンテナを2つ以上選べる", q.antenna.multi)}${bx("antenna.own", "アンテナに「自分で決める」を出す", q.antenna.own)}</div>
+        <div class="row">${bx("quest.own", "QUEST に「自分で決める」を出す", q.quest.own)}${bx("motto.enabled", "「今日の意気込み」を聞く", q.motto.enabled)}</div></div>
+      <div class="card"><h2>夜（共通）</h2>
+        ${ls("quest_result.options", "QUEST の結果", q.quest_result.options)}
+        ${ls("feelings.options", "今日あったもの（いくつでも選べる）", q.feelings.options)}
+        ${ls("win.options", "今日、自分に勝った？", q.win.options)}
+        <div class="grid3">${tx("key.before", "発見の書き出し", q.key.before)}${tx("key.after", "発見の終わり", q.key.after)}</div></div>
+      <div class="days5">${["mon", "tue", "wed", "thu", "fri"].map(dayCard).join("")}</div>
+      <div class="card actions sticky"><button type="button" id="resetq">シートどおりに戻す</button><button type="button" class="primary" id="saveq">保存</button></div>`);
+    document.getElementById("saveq").onclick = (ev) => save(ev.target, "saveQuestions", [collectQuestions()], "保存しました。次に入力ページを開いたときから変わります。");
+    document.getElementById("resetq").onclick = (ev) => {
+      if (!window.confirm || !window.confirm("設問をシートどおり（初期値）に戻します。よろしいですか？")) return;
+      save(ev.target, "resetQuestions", [], "シートどおりに戻しました。");
+    };
+  }
+
+  /** 画面の入力欄から、設問の形（今の設定をもとに上書き）を組み立てる。最終的な形はサーバーでそろえる */
+  function collectQuestions() {
+    const q = JSON.parse(JSON.stringify(A.questions));
+    app.querySelectorAll("[data-path]").forEach((el) => {
+      const keys = el.dataset.path.split(".");
+      let o = q;
+      keys.slice(0, -1).forEach((k) => { o = o[k]; });
+      const last = keys[keys.length - 1];
+      o[last] = el.type === "checkbox" ? el.checked
+        : el.hasAttribute("data-list") ? el.value.split("\n").map((s) => s.trim()).filter(Boolean)
+        : el.value;
+    });
+    return q;
+  }
+
+  function rewardTab() {
+    shell(`${flashBox}<div class="card"><h2>ごほうび</h2>
+      <p class="note">朝と夜の両方を書いた平日に ★ が1つ。目標に届くと、その子の LINE にお祝いが届き、「記録」タブに 🎁 が出ます。<br>
+      <b>ギフトそのものは自動では贈れません。</b>LINE ギフトなどで贈ってから「贈った」を押してください。</p>
+      <div class="grid3">
+        <label class="f"><span>月の目標（★の数）</span><input type="number" id="goal" min="0" max="23" inputmode="numeric" value="${A.stampGoal || ""}" placeholder="空ならその月の平日の数"><small>空にすると、その月の平日の数（10月なら22）。祝日や行事が多い月に減らします</small></label>
+        <label class="f"><span>ごほうびの言い方</span><input type="text" id="label" maxlength="30" value="${esc(A.giftLabel)}" placeholder="${esc(A.defaultGiftLabel)}"><small>メッセージに「○○のプレゼントを用意するね」と出ます</small></label>
+      </div>
+      <div class="actions"><button type="button" class="primary" id="saver">保存</button></div></div>`);
+    document.getElementById("saver").onclick = (ev) => save(ev.target, "saveReward",
+      [document.getElementById("goal").value, document.getElementById("label").value], "保存しました。");
   }
 
   load("", "");

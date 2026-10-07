@@ -3,16 +3,16 @@
  *
  * 役割は3つ：
  *   1. LINE の Webhook を受ける（友だち追加・メッセージ）→ 返信する（返信は無料枠を使わない）
- *   2. 入力ページ（LIFF）からの送信を受けて、スプレッドシートに1日1行で書く
+ *   2. 入力ページ（LIFF）に設問と「この LINE から書ける子ども」を渡し、送信をスプレッドシートに1日1行で書く
  *   3. 平日の朝・夜に声かけを送る（時間トリガー）
+ *
+ * 設問・ごほうびの言い方・目標は、親が管理画面で変える（settings シート）。ここには書かない
  *
  * 設定は「プロジェクトの設定 → スクリプト プロパティ」に置く（コードに秘密を書かない）：
  *   LINE_CHANNEL_ACCESS_TOKEN  Messaging API のチャネルアクセストークン（長期）
  *   LINE_LOGIN_CHANNEL_ID      LIFF を作った LINE ログインチャネルのチャネルID（IDトークンの確認に使う）
  *   WEBHOOK_KEY                Webhook URL の末尾に付ける合言葉（?key=…）
  *   LIFF_URL                   https://liff.line.me/xxxxxxxx-xxxxxxxx
- *   （任意）STAMP_GOAL          月のスタンプの目標。無ければその月の平日の数
- *   （任意）GIFT_LABEL          ごほうびの言い方。無ければ「1,000円分」
  *   （任意）PARENT_LINE_USER_ID 達成を LINE で知らせる親のユーザーID（users シートからコピー）
  *
  * 【Webhook に合言葉を付ける理由】
@@ -33,12 +33,20 @@ function doPost(e) {
   }
   // 入力ページから
   try {
-    const user = verifyIdToken_(body.idToken);
-    if (body.type === 'get') return json_({ ok: true, row: getRow_(body.date, user.userId) });
+    const line = verifyIdToken_(body.idToken);
+    const kids = childrenForLine_(children_(), line.userId);
+    if (body.type === 'config') {
+      // 子どもがまだつながっていなくても設問は返す（画面で「親に頼んでね」を出すため）
+      return json_({ ok: true, questions: settings_().questions, children: kids.map(function (c) { return { id: c.id, name: c.name }; }),
+        lineName: line.name });
+    }
+    const child = kids.filter(function (c) { return c.id === body.childId; })[0];
+    if (!child) throw new Error('この LINE からは、その人の分を書けません（親の画面でつなげてもらってください）');
+    if (body.type === 'get') return json_({ ok: true, row: getRow_(body.date, child.id) });
     if (body.type === 'submit') {
-      const row = saveSlot_(user, body.date, body.slot, body.data || {});
-      const st = monthStampsFor_(user.userId, String(body.date).slice(0, 7));
-      return json_({ ok: true, streak: streak_(user.userId), row: row, stamps: { count: st.count, goal: st.goal } });
+      const row = saveSlot_(child, body.date, body.slot, body.data || {});
+      const st = monthStampsFor_(child.id, String(body.date).slice(0, 7));
+      return json_({ ok: true, streak: streak_(child.id), row: row, stamps: { count: st.count, goal: st.goal } });
     }
     return json_({ ok: false, error: 'unknown type' });
   } catch (err) {
@@ -65,20 +73,26 @@ function handleEvent_(ev) {
   }
   if (ev.type === 'message' && ev.message && ev.message.type === 'text') {
     const t = ev.message.text || '';
+    const kids = childrenForLine_(children_(), userId);
     if (t.indexOf('【朝のチェック完了】') === 0) {
+      const child = resolveChild_(kids, t);
       const msgs = [text_(pick_([
         'アンテナON！いってらっしゃい。', 'いいスタート！今日のQUEST、楽しんで。', 'セット完了。見つからなくてもそれも発見だよ。',
       ]))];
       // 夜を先に書いた日は、朝でスタンプがそろうことがある
-      reply_(ev.replyToken, msgs.concat(stampMessages_(userId, false)));
+      reply_(ev.replyToken, child ? msgs.concat(stampMessages_(child, false)) : msgs);
     } else if (t.indexOf('【夜のチェック完了】') === 0) {
-      const n = streak_(userId);
+      const child = resolveChild_(kids, t);
+      const n = child ? streak_(child.id) : 0;
       const msgs = [text_(pick_([
         'おつかれさま！今日の宝物、ちゃんと残せたね。', 'GETでも惜しいでも、書いたことが前進。', '今日のKEY、いい言葉だね。',
       ]) + (n >= 2 ? '\n\n連続 ' + n + ' 日目！' : ''))];
-      reply_(ev.replyToken, msgs.concat(stampMessages_(userId, true)));
+      reply_(ev.replyToken, child ? msgs.concat(stampMessages_(child, true)) : msgs);
     } else if (/スタンプ|ギフト/.test(t)) {
-      reply_(ev.replyToken, [stampCardFlex_(monthStampsFor_(userId, jstDate_(new Date()).slice(0, 7)))]);
+      // 兄弟で共有している LINE なら、2人分のカードを並べる
+      const ym = jstDate_(new Date()).slice(0, 7);
+      const cards = kids.slice(0, 5).map(function (c) { return stampCardFlex_(monthStampsFor_(c.id, ym), c.name); });
+      reply_(ev.replyToken, cards.length ? cards : [text_('まだ名前が登録されていません。親の画面で、この LINE と名前をつなげてもらってください。')]);
     } else {
       reply_(ev.replyToken, [menuButtons_()]);
     }
@@ -98,16 +112,16 @@ const STICKER_GOAL = { packageId: '11537', stickerId: '52002739' };
 
 /**
  * 返信に足すもの：今月のスタンプカード。5個ごとにスタンプ（LINE の）。目標に届いた日はお祝いとギフトの予告。
- * 目標に届いたら gifts シートに1行足し、親に知らせる（1か月に1回）
+ * 目標に届いたら gifts シートに1行足し、親に知らせる（1人1か月に1回）
  */
-function stampMessages_(userId, withCard) {
+function stampMessages_(child, withCard) {
   const ym = jstDate_(new Date()).slice(0, 7);
-  const st = monthStampsFor_(userId, ym);
+  const st = monthStampsFor_(child.id, ym);
   const out = [];
-  const newlyAchieved = st.achieved && recordGift_(userId, st);
-  if (withCard || newlyAchieved) out.push(stampCardFlex_(st));
+  const newlyAchieved = st.achieved && recordGift_(child, st);
+  if (withCard || newlyAchieved) out.push(stampCardFlex_(st, child.name));
   if (newlyAchieved) {
-    out.push(text_('🎁 ' + Number(ym.slice(5)) + '月のスタンプがぜんぶそろった！\n' + giftLabel_() + 'のプレゼントを用意するね。届くまで少し待ってて。'));
+    out.push(text_('🎁 ' + child.name + '、' + Number(ym.slice(5)) + '月のスタンプがぜんぶそろった！\n' + giftLabel_() + 'のプレゼントを用意するね。届くまで少し待ってて。'));
     out.push(sticker_(STICKER_GOAL));
   } else if (withCard && st.count > 0 && st.count % 5 === 0) {
     out.push(sticker_(pick_(STICKERS_DAILY)));
@@ -115,37 +129,34 @@ function stampMessages_(userId, withCard) {
   return out.slice(0, 4); // 返信は最大5通。先頭の文と合わせて5以内
 }
 
-function monthStampsFor_(userId, ym) {
-  const values = sheet_(SHEET_RECORDS, HEADER_JA).getDataRange().getValues().slice(1).map(rowToObj_);
-  return monthStamps_(doneDates_(values, userId), ym, prop_('STAMP_GOAL'));
+function monthStampsFor_(childId, ym) {
+  return monthStamps_(doneDates_(records_(), childId), ym, settings_().stampGoal);
 }
 
 /** gifts シートに今月の達成を書く。もう書いてあれば false（＝お祝いは1回だけ） */
-function recordGift_(userId, st) {
+function recordGift_(child, st) {
   const sh = sheet_(SHEET_GIFTS, GIFTS_HEADER);
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
     const values = sh.getDataRange().getValues();
     for (let i = 1; i < values.length; i++) {
-      if (String(values[i][0]) === st.ym && values[i][1] === userId) return false;
+      if (String(values[i][0]) === st.ym && String(values[i][1]) === child.id) return false;
     }
-    const u = findUser_(userId) || {};
-    sh.appendRow([st.ym, userId, u.name || '', st.count, st.goal, jstDateTime_(new Date()), '未贈呈', '']);
+    sh.appendRow([st.ym, child.id, child.name, st.count, st.goal, jstDateTime_(new Date()), '未贈呈', '']);
   } finally {
     lock.releaseLock();
   }
   // 親に知らせる（任意）。PARENT_LINE_USER_ID が無ければ親の画面で気づく
   const parent = prop_('PARENT_LINE_USER_ID');
   if (parent) {
-    const u = findUser_(userId) || {};
-    push_(parent, [text_('🎁 ' + (u.name || '') + 'さんが ' + st.ym + ' のスタンプを全部そろえました（' + st.count + '/' + st.goal + '）。\n' +
+    push_(parent, [text_('🎁 ' + child.name + 'さんが ' + st.ym + ' のスタンプを全部そろえました（' + st.count + '/' + st.goal + '）。\n' +
       'ギフトを贈ったら、親の画面で「贈った」を押してください。')]);
   }
   return true;
 }
 
-function giftLabel_() { return prop_('GIFT_LABEL') || '1,000円分'; }
+function giftLabel_() { return settings_().giftLabel || DEFAULT_GIFT_LABEL; }
 function sticker_(s) { return { type: 'sticker', packageId: s.packageId, stickerId: s.stickerId }; }
 
 function menuButtons_() {
@@ -182,7 +193,7 @@ function lineApi_(url, payload) {
   }).getResponseCode();
 }
 
-/** 入力ページから来た IDトークンを LINE に確かめてもらい、誰の送信かを決める */
+/** 入力ページから来た IDトークンを LINE に確かめてもらい、どの LINE からの送信かを決める */
 function verifyIdToken_(idToken) {
   if (!idToken) throw new Error('ログインが確認できません');
   const res = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify', {
@@ -192,8 +203,8 @@ function verifyIdToken_(idToken) {
   const v = JSON.parse(res.getContentText());
   if (res.getResponseCode() !== 200 || !v.sub) throw new Error('ログインの確認に失敗しました（開き直してください）');
   const u = findUser_(v.sub);
-  // 友だち追加していない人・止めた人の送信は受けない
-  if (!u || !u.active) throw new Error('この LINE アカウントは登録されていません');
+  // 友だち追加していない LINE・止めた LINE の送信は受けない
+  if (!u || !u.active) throw new Error('この LINE アカウントは登録されていません（公式アカウントを友だち追加してください）');
   return { userId: v.sub, name: u.name || v.name || '' };
 }
 
@@ -207,15 +218,17 @@ function remind_(slot) {
   const wd = weekdayKey_(new Date());
   if (wd === 'sat' || wd === 'sun') return; // 平日だけ
   const liff = prop_('LIFF_URL');
-  activeUsers_().forEach(function (u) {
-    const row = getRow_(today, u.userId);
-    // もう書いた人には送らない（無料の通数を使わない）
-    if (slot === 'morning' && row && row.morning_at) return;
-    if (slot === 'night' && row && row.night_at) return;
+  const activeLines = {};
+  activeUsers_().forEach(function (u) { activeLines[u.userId] = true; });
+  const todays = records_().filter(function (r) { return r.date === today; });
+  // まだ書いていない子がいる LINE にだけ、1通ずつ（無料の通数を使わない）
+  remindTargets_(children_(), todays, slot).forEach(function (t) {
+    if (!activeLines[t.lineUserId]) return;
+    const who = t.names.length > 1 ? '（' + t.names.join('・') + '）' : '';
     const msg = slot === 'morning'
-      ? '☀ おはよう！今日のアンテナを立てよう（2〜3分）\n' + liff + '?slot=morning'
-      : '🌙 今日の宝物、見つかった？（2〜3分）\n' + liff + '?slot=night';
-    push_(u.userId, [text_(msg)]);
+      ? '☀ おはよう！今日のアンテナを立てよう' + who + '（2〜3分）\n' + liff + '?slot=morning'
+      : '🌙 今日の宝物、見つかった？' + who + '（2〜3分）\n' + liff + '?slot=night';
+    push_(t.lineUserId, [text_(msg)]);
   });
 }
 
@@ -223,7 +236,9 @@ function remind_(slot) {
 function setup() {
   sheet_(SHEET_RECORDS, HEADER_JA);
   sheet_(SHEET_USERS, USERS_HEADER);
+  sheet_(SHEET_CHILDREN, CHILDREN_HEADER);
   sheet_(SHEET_GIFTS, GIFTS_HEADER);
+  sheet_(SHEET_SETTINGS, SETTINGS_HEADER);
   ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('sendMorningReminder').timeBased().everyDays(1).atHour(7).inTimezone('Asia/Tokyo').create();
   ScriptApp.newTrigger('sendNightReminder').timeBased().everyDays(1).atHour(21).inTimezone('Asia/Tokyo').create();
@@ -231,7 +246,7 @@ function setup() {
 
 // ---------------------------------------------------------------- シート
 
-function saveSlot_(user, date, slot, data) {
+function saveSlot_(child, date, slot, data) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) throw new Error('日付が正しくありません');
   if (slot !== 'morning' && slot !== 'night') throw new Error('朝か夜かが分かりません');
   const sh = sheet_(SHEET_RECORDS, HEADER_JA);
@@ -241,10 +256,10 @@ function saveSlot_(user, date, slot, data) {
     const values = sh.getDataRange().getValues();
     let idx = -1;
     for (let i = 1; i < values.length; i++) {
-      if (cellDate_(values[i][0]) === date && values[i][3] === user.userId) { idx = i; break; }
+      if (cellDate_(values[i][COL.date]) === date && String(values[i][COL.child_id]) === child.id) { idx = i; break; }
     }
     const current = idx >= 0 ? rowToObj_(values[idx]) : null;
-    const next = buildRow_(current, user, date, slot, data, new Date());
+    const next = buildRow_(current, child, date, slot, data, new Date());
     const arr = COLUMNS.map(function (c) { return next[c] === undefined ? '' : next[c]; });
     if (idx >= 0) sh.getRange(idx + 1, 1, 1, arr.length).setValues([arr]);
     else sh.appendRow(arr);
@@ -254,21 +269,32 @@ function saveSlot_(user, date, slot, data) {
   }
 }
 
-function getRow_(date, userId) {
-  const values = sheet_(SHEET_RECORDS, HEADER_JA).getDataRange().getValues();
-  for (let i = values.length - 1; i >= 1; i--) {
-    if (cellDate_(values[i][0]) === date && values[i][3] === userId) return rowToObj_(values[i]);
+function records_() {
+  return sheet_(SHEET_RECORDS, HEADER_JA).getDataRange().getValues().slice(1).map(rowToObj_)
+    .map(function (r) { r.child_id = String(r.child_id); return r; });
+}
+
+function getRow_(date, childId) {
+  const rows = records_();
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].date === date && rows[i].child_id === childId) return rows[i];
   }
   return null;
 }
 
-function streak_(userId) {
-  const values = sheet_(SHEET_RECORDS, HEADER_JA).getDataRange().getValues();
-  const dates = [];
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][3] === userId && values[i][19]) dates.push(cellDate_(values[i][0]));
-  }
+function streak_(childId) {
+  const dates = records_().filter(function (r) { return r.child_id === childId && r.night_at; }).map(function (r) { return r.date; });
   return countStreak_(dates, jstDate_(new Date()));
+}
+
+function children_() {
+  return childrenFromRows_(sheet_(SHEET_CHILDREN, CHILDREN_HEADER).getDataRange().getValues().slice(1));
+}
+
+let settingsCache_ = null;
+function settings_() {
+  if (!settingsCache_) settingsCache_ = parseSettings_(sheet_(SHEET_SETTINGS, SETTINGS_HEADER).getDataRange().getValues().slice(1));
+  return settingsCache_;
 }
 
 function registerUser_(userId) {
@@ -313,7 +339,7 @@ function sheet_(name, header) {
  * 今月のスタンプカード（LINE の Flex メッセージ）。平日を週ごとに5列で並べ、押した日に ★
  * Google のサービスを呼ばない（tests/ で形を確かめている）
  */
-function stampCardFlex_(st) {
+function stampCardFlex_(st, name) {
   const set = {};
   st.stamped.forEach(function (d) { set[d] = true; });
   const today = jstDate_(new Date());
@@ -342,13 +368,13 @@ function stampCardFlex_(st) {
   });
   const left = Math.max(0, st.goal - st.count);
   return {
-    type: 'flex', altText: '今月のスタンプ ' + st.count + '/' + st.goal,
+    type: 'flex', altText: (name ? name + ' ' : '') + '今月のスタンプ ' + st.count + '/' + st.goal,
     contents: {
       type: 'bubble', size: 'kilo',
       body: {
         type: 'box', layout: 'vertical', spacing: '6px',
         contents: [
-          { type: 'text', text: Number(st.ym.slice(5)) + '月のスタンプ', weight: 'bold', size: 'md' },
+          { type: 'text', text: (name ? name + '　' : '') + Number(st.ym.slice(5)) + '月のスタンプ', weight: 'bold', size: 'md', wrap: true },
           { type: 'text', text: st.count + ' / ' + st.goal + (st.achieved ? '　🎁 達成！' : '　あと ' + left + ' 個で 🎁'), size: 'sm', color: st.achieved ? '#E8798A' : '#6B7280' },
           { type: 'box', layout: 'horizontal', spacing: '4px', margin: 'md', contents: head },
         ].concat(rows).concat([

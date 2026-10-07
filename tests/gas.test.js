@@ -1,9 +1,12 @@
 // Code.gs の「純粋な処理」を Node で確かめる（Google のサービスは使わない部分だけ）
 const fs = require("fs"), vm = require("vm"), assert = require("assert");
 const ctx = {}; vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(__dirname + "/../gas/Shared.gs", "utf8") + fs.readFileSync(__dirname + "/../gas/Code.gs", "utf8") + "\nthis.api={buildRow_,countStreak_,jstDate_,weekdayKey_,COLUMNS,monthStamps_,monthWeekdays_,doneDates_,stampCardFlex_};", ctx);
-const { buildRow_, countStreak_, jstDate_, weekdayKey_, COLUMNS, monthStamps_, monthWeekdays_, doneDates_, stampCardFlex_ } = ctx.api;
-const user = { userId: "U1", name: "息子" };
+vm.runInContext(fs.readFileSync(__dirname + "/../gas/Shared.gs", "utf8") + fs.readFileSync(__dirname + "/../gas/Code.gs", "utf8") + "\nthis.api={buildRow_,countStreak_,jstDate_,weekdayKey_,COLUMNS,HEADER_JA,monthStamps_,monthWeekdays_,doneDates_,stampCardFlex_,normalizeQuestions_,parseSettings_,DEFAULT_QUESTIONS,childrenFromRows_,childrenForLine_,resolveChild_,remindTargets_,newChildId_};", ctx);
+const { buildRow_, countStreak_, jstDate_, weekdayKey_, COLUMNS, HEADER_JA, monthStamps_, monthWeekdays_, doneDates_, stampCardFlex_, normalizeQuestions_, parseSettings_, DEFAULT_QUESTIONS,
+  childrenFromRows_, childrenForLine_, resolveChild_, remindTargets_, newChildId_ } = ctx.api;
+const user = { id: "c1", name: "たかまさ" };
+// vm の中で作った配列・オブジェクトは deepStrictEqual で別物扱いになるので、JSON で比べる
+const same = (a, b) => assert.deepStrictEqual(JSON.parse(JSON.stringify(a)), JSON.parse(JSON.stringify(b)));
 let ok = 0; const t = (name, fn) => { fn(); ok++; console.log("✓", name); };
 
 t("日本時間の日付と曜日（UTC 15:30 は翌日の0:30）", () => {
@@ -39,12 +42,12 @@ t("2026年10月の平日は22日。1日は木曜", () => {
 });
 t("スタンプは朝と夜の両方を書いた平日だけ。土日の記録は数えない", () => {
   const rows = [
-    { user_id: "U1", date: "2026-10-05", morning_at: "x", night_at: "y" },
-    { user_id: "U1", date: "2026-10-06", morning_at: "x", night_at: "" },   // 夜なし
-    { user_id: "U1", date: "2026-10-10", morning_at: "x", night_at: "y" },  // 土曜
-    { user_id: "U2", date: "2026-10-07", morning_at: "x", night_at: "y" },  // 別の人
+    { child_id: "c1", date: "2026-10-05", morning_at: "x", night_at: "y" },
+    { child_id: "c1", date: "2026-10-06", morning_at: "x", night_at: "" },   // 夜なし
+    { child_id: "c1", date: "2026-10-10", morning_at: "x", night_at: "y" },  // 土曜
+    { child_id: "c2", date: "2026-10-07", morning_at: "x", night_at: "y" },  // 別の人
   ];
-  const st = monthStamps_(doneDates_(rows, "U1"), "2026-10", "");
+  const st = monthStamps_(doneDates_(rows, "c1"), "2026-10", "");
   assert.strictEqual(st.count, 1); assert.strictEqual(st.goal, 22); assert.strictEqual(st.achieved, false);
 });
 t("目標を指定できる。平日の数より大きい指定は平日の数にそろえる", () => {
@@ -62,5 +65,61 @@ t("スタンプカードは週ごとに5列、押した日に ★、代替テキ
 });
 t("Shared.gs はボットと親の画面で同じ中身（片方だけ直すと数え方が食い違う）", () => {
   assert.strictEqual(fs.readFileSync(__dirname + "/../gas/Shared.gs", "utf8"), fs.readFileSync(__dirname + "/../gas-parent/Shared.gs", "utf8"));
+});
+t("夜の追加の質問は「問い：答え」で1列に入る。答えが空の質問は入れない", () => {
+  const r = buildRow_(null, user, "2026-10-09", "night", { extra: [{ q: "今週の一番の宝物は？", a: "試合" }, { q: "来週は？", a: " " }] }, new Date());
+  assert.strictEqual(r.extra, "今週の一番の宝物は？：試合"); assert.strictEqual(r.child_id, "c1"); assert.strictEqual(r.name, "たかまさ");
+  assert.strictEqual(COLUMNS.length, HEADER_JA.length);
+});
+t("設問の初期値は web/questions.json と同じ（入力ページの見本と管理画面の初期値を食い違わせない）", () => {
+  same(DEFAULT_QUESTIONS, JSON.parse(fs.readFileSync(__dirname + "/../web/questions.json", "utf8")));
+});
+t("設問をそろえる：知らない項目は捨て、空の選択肢は初期値、QUEST とその日のアンテナは空にできる", () => {
+  const q = normalizeQuestions_({
+    evil: "<script>", antenna: { options: ["  音 ", "音", "", "自由"], multi: true },
+    win: { options: [] }, days: { mon: { quests: [], antenna: ["なんか好き", "なんか嫌"], name: "x".repeat(99) } },
+  });
+  assert.strictEqual(q.evil, undefined);
+  same(q.antenna.options, ["音", "自由"]); assert.strictEqual(q.antenna.multi, true);
+  same(q.win.options, DEFAULT_QUESTIONS.win.options);
+  same(q.days.mon.quests, []); same(q.days.mon.antenna, ["なんか好き", "なんか嫌"]); assert.strictEqual(q.days.mon.name.length, 40);
+  same(q.days.tue, DEFAULT_QUESTIONS.days.tue);
+  same(normalizeQuestions_(null), Object.assign({}, DEFAULT_QUESTIONS, { _note: undefined }));
+});
+t("settings シートが壊れていても初期値で動く", () => {
+  const s = parseSettings_([["questions", "{壊れた"], ["stamp_goal", "20"], ["gift_label", " 2,000円分 "]]);
+  assert.strictEqual(s.customized, false); assert.strictEqual(s.stampGoal, 20); assert.strictEqual(s.giftLabel, "2,000円分");
+  same(s.questions.days.fri.quests, DEFAULT_QUESTIONS.days.fri.quests);
+  assert.strictEqual(parseSettings_([]).stampGoal, 0);
+});
+const kids = childrenFromRows_([["c1", "たかまさ", true, "LA"], ["c2", "ゆうま", "TRUE", "LA"], ["c3", "止めた子", false, "LA"], ["c4", "別の携帯", true, "LB"], ["", "", "", ""]]);
+t("1つの LINE を兄弟で共有できる。止めた子は出ない", () => {
+  same(childrenForLine_(kids, "LA").map((c) => c.name), ["たかまさ", "ゆうま"]);
+  same(childrenForLine_(kids, "LB").map((c) => c.id), ["c4"]);
+  same(childrenForLine_(kids, ""), []);
+});
+t("「完了」メッセージの1行目の名前で子を決める。1人の LINE なら名前が無くても決まる", () => {
+  const la = childrenForLine_(kids, "LA"), lb = childrenForLine_(kids, "LB");
+  assert.strictEqual(resolveChild_(la, "【夜のチェック完了】ゆうま\n結果：GET!").id, "c2");
+  assert.strictEqual(resolveChild_(la, "【夜のチェック完了】\n結果：GET!"), null);
+  assert.strictEqual(resolveChild_(lb, "【朝のチェック完了】\n体3").id, "c4");
+});
+t("声かけは LINE 1つに1通。書いた子は外し、全員書いた LINE には送らない", () => {
+  const today = [{ child_id: "c1", morning_at: "x", night_at: "" }, { child_id: "c4", morning_at: "x", night_at: "" }];
+  same(remindTargets_(kids, today, "morning"), [{ lineUserId: "LA", names: ["ゆうま"] }]);
+  same(remindTargets_(kids, today, "night"), [{ lineUserId: "LA", names: ["たかまさ", "ゆうま"] }, { lineUserId: "LB", names: ["別の携帯"] }]);
+});
+t("子IDは名前と関係なく c1, c2, … で増える", () => {
+  assert.strictEqual(newChildId_(kids), "c5"); assert.strictEqual(newChildId_([]), "c1");
+});
+t("スタンプカードに名前が載る（兄弟で共有の LINE で見分けるため）", () => {
+  const f = stampCardFlex_(monthStamps_([], "2026-10", ""), "ゆうま");
+  assert.strictEqual(f.altText, "ゆうま 今月のスタンプ 0/22");
+});
+t("見本の画面の設問（preview/questions.sample.js）も同じ中身", () => {
+  const c = {}; vm.createContext(c); c.window = c;
+  vm.runInContext(fs.readFileSync(__dirname + "/../preview/questions.sample.js", "utf8"), c);
+  const q = JSON.parse(fs.readFileSync(__dirname + "/../web/questions.json", "utf8")); delete q._note;
+  same(c.SAMPLE_QUESTIONS, q);
 });
 console.log(`\n${ok} 件すべて通過`);
