@@ -30,7 +30,12 @@ function doPost(e) {
   const body = JSON.parse((e.postData && e.postData.contents) || '{}');
   // LINE からの Webhook
   if (body.events) {
-    if (!e.parameter || e.parameter.key !== prop_('WEBHOOK_KEY')) return json_({ ok: false });
+    // 届いたこと・合言葉の合否・イベントの種類を「実行数」のログに残す（中身は残さない）
+    if (!e.parameter || e.parameter.key !== prop_('WEBHOOK_KEY')) {
+      console.warn('Webhook：合言葉が合いません。Webhook URL の ?key= とスクリプト プロパティの WEBHOOK_KEY を見比べてください');
+      return json_({ ok: false });
+    }
+    console.log('Webhook：' + (body.events.map(function (ev) { return ev.type; }).join(', ') || '（検証）'));
     body.events.forEach(handleEvent_);
     return json_({ ok: true });
   }
@@ -189,11 +194,15 @@ function push_(to, messages) {
 }
 
 function lineApi_(url, payload) {
-  return UrlFetchApp.fetch(url, {
+  const res = UrlFetchApp.fetch(url, {
     method: 'post', contentType: 'application/json', muteHttpExceptions: true,
     headers: { Authorization: 'Bearer ' + prop_('LINE_CHANNEL_ACCESS_TOKEN') },
     payload: JSON.stringify(payload),
-  }).getResponseCode();
+  });
+  const code = res.getResponseCode();
+  // 断られた理由（トークン違い・上限・形の誤り）は LINE が返す。「実行数」で見えるように残す
+  if (code !== 200) console.warn('LINE API ' + url.split('/').pop() + '：' + code + ' ' + res.getContentText().slice(0, 300));
+  return code;
 }
 
 /** 入力ページから来た IDトークンを LINE に確かめてもらい、どの LINE からの送信かを決める */
