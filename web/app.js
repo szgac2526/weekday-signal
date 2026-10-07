@@ -91,7 +91,7 @@
   const blank = (name, before, after, label) =>
     `<div class="blankline">${before ? `<span>${esc(before)}</span>` : ""}<input type="text" name="${name}" aria-label="${esc(label)}">${after ? `<span>${esc(after)}</span>` : ""}</div>`;
 
-  // 山並み（紙のシートの上の帯）。色は曜日の色に合わせる
+  // 山並み（紙のシートの上の帯）。空と太陽・月は style.css が朝・夜で描き分ける
   const MOUNTAINS = `<svg class="mtn" viewBox="0 0 400 90" preserveAspectRatio="none" aria-hidden="true">
     <path d="M0 90 L0 62 L46 34 L78 52 L122 18 L160 46 L196 30 L238 58 L282 22 L322 50 L360 36 L400 54 L400 90 Z" fill="rgba(255,255,255,.16)"/>
     <path d="M0 90 L0 74 L60 52 L104 70 L150 48 L206 72 L256 50 L300 70 L352 56 L400 72 L400 90 Z" fill="rgba(10,18,40,.35)"/></svg>`;
