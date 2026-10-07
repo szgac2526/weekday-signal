@@ -1,6 +1,7 @@
-# WEEKDAY SIGNAL
+# Aestus
 
 平日の朝・夜に2〜3分ずつ書くワーク「WEEKDAY SIGNAL」を、LINE から入力してスプレッドシートに溜める仕組み。
+アプリ名は **Aestus**（ワークの名前は WEEKDAY SIGNAL のまま）。リポジトリ名 `weekday-signal` は、入力ページの URL に入っているので変えていない
 
 - 入力：LINE のトーク画面下のメニュー「朝」「夜」→ LINE の中で開く入力ページ（LIFF）
 - 記録：Google スプレッドシート（1日1行）。Excel でも落とせる

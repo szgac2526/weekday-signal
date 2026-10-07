@@ -1,5 +1,5 @@
 /**
- * WEEKDAY SIGNAL — Google Apps Script（スプレッドシートに紐づけて使う）
+ * Aestus — Google Apps Script（スプレッドシートに紐づけて使う）
  *
  * 役割は3つ：
  *   1. LINE の Webhook を受ける（友だち追加・メッセージ）→ 返信する（返信は無料枠を使わない）
@@ -56,7 +56,7 @@ function doPost(e) {
 
 // 動作確認用（ブラウザで Web アプリの URL を開くと出る）
 function doGet() {
-  return ContentService.createTextOutput('WEEKDAY SIGNAL is running');
+  return ContentService.createTextOutput('Aestus is running');
 }
 
 // ---------------------------------------------------------------- LINE
@@ -66,7 +66,7 @@ function handleEvent_(ev) {
   if (ev.type === 'follow' && userId) {
     registerUser_(userId);
     reply_(ev.replyToken, [text_(
-      '友だち追加ありがとう！\nWEEKDAY SIGNAL は、平日の朝と夜に2〜3分ずつ、自分のアンテナを立てて宝物を探すワークです。\n\n' +
+      '友だち追加ありがとう！Aestus です。\nワーク「WEEKDAY SIGNAL」を、平日の朝と夜に2〜3分ずつ、自分のアンテナを立てて宝物を探そう。\n\n' +
       '下のメニューの「朝」「夜」から書けます。正解はありません。短くてOK！'
     ), menuButtons_()]);
     return;

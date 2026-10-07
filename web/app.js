@@ -1,4 +1,4 @@
-// WEEKDAY SIGNAL 入力ページ（LINE の中で開く LIFF アプリ）
+// Aestus 入力ページ（LINE の中で開く LIFF アプリ）
 //
 //   ?slot=morning | night   朝のチェックか夜のチェックか（無ければ時刻で決める）
 //   ?mock=1                 LINE も Apps Script も使わない見本モード（見た目の確認用）
@@ -54,7 +54,7 @@
       const n = params.has("kids") ? Number(params.get("kids")) : 2;
       return { ok: true, questions, children: all.slice(0, n), lineName: "見本" };
     }
-    const key = "ws-mock-" + body.childId + "-" + body.date;
+    const key = "aestus-mock-" + body.childId + "-" + body.date;
     let row = null;
     try { row = JSON.parse(localStorage.getItem(key) || "null"); } catch (_) {}
     if (body.type === "get") return { ok: true, row };
@@ -90,7 +90,7 @@
       ? `<div class="who" role="group" aria-label="書く人">${kids.map((c) => `<button type="button" data-child="${esc(c.id)}" aria-pressed="${c.id === state.child.id}">${esc(c.name)}</button>`).join("")}</div>`
       : "";
     return `<header class="hero">
-      <div class="brand">WEEKDAY SIGNAL</div>
+      <div class="brand"><b>Aestus</b><span>WEEKDAY SIGNAL</span></div>
       <div class="dayline"><span class="en">${DAY_EN[state.day]}</span><span class="ja">${DAY_JA[state.day]}曜日</span><span class="date">${mdLabel(state.date)}</span></div>
       <h1>${esc(d.name)}</h1>
       <p class="theme">${esc(d.theme)}</p>
@@ -160,7 +160,7 @@
     app.querySelectorAll(".daypick button").forEach((b) => b.addEventListener("click", () => { state.day = b.dataset.day; render(); }));
     app.querySelectorAll(".who button").forEach((b) => b.addEventListener("click", () => {
       state.child = kids.find((c) => c.id === b.dataset.child) || state.child;
-      remember.set("ws-child", state.child.id);
+      remember.set("aestus-child", state.child.id);
       render();
     }));
     app.querySelector("#f").addEventListener("submit", submit);
@@ -219,7 +219,7 @@
       const again = app.querySelector(".again");
       if (again) again.addEventListener("click", () => {
         state.child = kids[(kids.indexOf(state.child) + 1) % kids.length];
-        remember.set("ws-child", state.child.id);
+        remember.set("aestus-child", state.child.id);
         render();
       });
       else if (line.isInClient()) setTimeout(() => line.closeWindow(), 1500);
@@ -247,7 +247,7 @@
       const now = new Date();
       const today = wdKey(now);
       const hour = jst(now).getUTCHours();
-      const saved = remember.get("ws-child");
+      const saved = remember.get("aestus-child");
       state = {
         slot: params.get("slot") === "night" || (params.get("slot") !== "morning" && hour >= 15) ? "night" : "morning",
         day: DAYS.includes(params.get("day")) ? params.get("day") : DAYS.includes(today) ? today : "fri",

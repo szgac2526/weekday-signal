@@ -1,5 +1,5 @@
 {
-  "_note": "WEEKDAY SIGNAL の設問の初期値（2026-10-07 の最新シート2枚から起こした）。親が管理画面で直すと、スプレッドシートの settings に保存した方が使われる。gas/Shared.gs の DEFAULT_QUESTIONS と同じ中身にする（テストが見る）",
+  "_note": "Aestus の設問の初期値（ワーク「WEEKDAY SIGNAL」の 2026-10-07 の最新シート2枚から起こした）。親が管理画面で直すと、スプレッドシートの settings に保存した方が使われる。gas/Shared.gs の DEFAULT_QUESTIONS と同じ中身にする（テストが見る）",
   "condition": {
     "label": "今の俺をチェック",
     "note": "数字は今の状態。良い・悪いはありません",

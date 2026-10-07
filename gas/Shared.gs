@@ -1,5 +1,5 @@
 /**
- * WEEKDAY SIGNAL — 共通の定義と処理。
+ * Aestus — 共通の定義と処理。
  * **ボット（gas/）と親の画面（gas-parent/）の両方に、同じ中身で置く。**
  * スタンプの数え方などを2か所に書くと、片方だけ直して食い違うため。
  * Google のサービスを呼ばない処理だけを置く（tests/ で Node から確かめている）。
@@ -39,7 +39,7 @@ const DEFAULT_GIFT_LABEL = '1,000円分';
 
 // 設問の初期値。**web/questions.json と同じ中身**（tests/ が食い違いを見る）
 const DEFAULT_QUESTIONS = {
-  "_note": "WEEKDAY SIGNAL の設問の初期値（2026-10-07 の最新シート2枚から起こした）。親が管理画面で直すと、スプレッドシートの settings に保存した方が使われる。gas/Shared.gs の DEFAULT_QUESTIONS と同じ中身にする（テストが見る）",
+  "_note": "Aestus の設問の初期値（ワーク「WEEKDAY SIGNAL」の 2026-10-07 の最新シート2枚から起こした）。親が管理画面で直すと、スプレッドシートの settings に保存した方が使われる。gas/Shared.gs の DEFAULT_QUESTIONS と同じ中身にする（テストが見る）",
   "condition": {
     "label": "今の俺をチェック",
     "note": "数字は今の状態。良い・悪いはありません",

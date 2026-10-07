@@ -1,5 +1,5 @@
 /**
- * WEEKDAY SIGNAL — 親の画面・管理画面（ボットとは別の Apps Script プロジェクト）
+ * Aestus — 親の画面・管理画面（ボットとは別の Apps Script プロジェクト）
  *
  * 【誰が使えるか】
  * Web アプリを「アクセスしているユーザーとして実行」「Google アカウントを持つ全員」で公開する。
@@ -18,7 +18,7 @@
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle('WEEKDAY SIGNAL 親の画面')
+    .setTitle('Aestus 親の画面')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 

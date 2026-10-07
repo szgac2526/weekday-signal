@@ -1,4 +1,4 @@
-/* 紙のシート（WEEKDAY SIGNAL）の見た目を引き継ぐ：紺の空と山の帯、曜日の色、朝・夜の帯、丸数字。
+/* Aestus の入力ページ。紙のシート（ワーク「WEEKDAY SIGNAL」）の見た目を引き継ぐ：紺の空と山の帯、曜日の色、朝・夜の帯、丸数字。
    指で押しやすい大きさ（44px 以上）を優先 */
 :root {
   --ink: #1f2635; --muted: #667085; --line: #e3e6ec; --bg: #f6f7fb; --card: #ffffff;
@@ -20,7 +20,9 @@ main { max-width: 560px; margin: 0 auto; padding: 0 0 calc(96px + env(safe-area-
 /* 上の帯：紺の空 → 曜日の色の朝焼け、山並み */
 .hero { position: relative; overflow: hidden; color: #fff; padding: 16px 16px 46px;
   background: linear-gradient(180deg, var(--navy) 0%, var(--navy-2) 55%, var(--accent) 135%); }
-.hero .brand { font-size: 12px; font-weight: 800; letter-spacing: .14em; opacity: .85; }
+.hero .brand { display: flex; align-items: baseline; gap: 8px; }
+.hero .brand b { font-size: 17px; font-weight: 800; letter-spacing: .04em; }
+.hero .brand span { font-size: 11px; font-weight: 700; letter-spacing: .14em; opacity: .75; }
 .hero .dayline { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; }
 .hero .dayline .en { font-size: 30px; font-weight: 900; letter-spacing: .02em; line-height: 1; }
 .hero .dayline .ja { font-size: 14px; font-weight: 700; }

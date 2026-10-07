@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <base target="_top">
-<title>WEEKDAY SIGNAL 親の画面</title>
+<title>Aestus 親の画面</title>
 <style>
 /* 上から「いま何が要るか」順：ギフト → 今月の数字 → スタンプ → 調子の推移 → よく出た言葉 → 毎日の記録 */
 :root {
@@ -228,7 +228,7 @@ button.primary { background: var(--accent); color: #fff; border-color: var(--acc
   let TAB = "records", A = null;
   function shell(inner) {
     const viewer = (D && D.viewer) || (A && A.viewer) || "";
-    app.innerHTML = `<header><h1>WEEKDAY SIGNAL</h1>
+    app.innerHTML = `<header><h1>Aestus</h1>
         <nav class="tabs" role="tablist">${TABS.map(([k, t]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${k === TAB}">${t}</button>`).join("")}</nav>
         <span class="who">${esc(viewer)} で表示中</span></header>${inner}`;
     app.querySelectorAll("[data-tab]").forEach((b) => { b.onclick = () => openTab(b.dataset.tab); });
