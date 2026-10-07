@@ -58,8 +58,10 @@
       return "Apps Script に doPost が見つかりません。Code.gs を貼って保存し、「デプロイを管理」から新バージョンでデプロイし直してください";
     if (/is not defined|ReferenceError/i.test(text))
       return "Apps Script の中で足りないものがあります（" + (text.match(/[\w$]+ is not defined/) || ["Shared.gs を貼ったか"])[0] + "）。Shared.gs を足して保存し、新バージョンでデプロイし直してください";
-    if (status === 404) return "Apps Script の URL が見つかりません。config.js の GAS_URL を確かめてください";
-    return "Apps Script から想定外の返事がありました（" + status + "）。Apps Script の「実行数」でエラーを見てください";
+    // 返ってきた画面の文字を少しだけ添える（原因の見当をつけるため。HTML のタグは除く）
+    const peek = String(text).replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+    if (status === 404) return "Apps Script から「見つかりません（404）」が返りました。ブラウザで GAS_URL を開いて「Aestus is running」と出るなら、ボットの「デプロイを管理」で新バージョンをデプロイし直してください（返事：" + peek + "）";
+    return "Apps Script から想定外の返事がありました（" + status + "）。Apps Script の「実行数」でエラーを見てください（返事：" + peek + "）";
   }
   async function mockApi(body) {
     if (body.type === "config") {
