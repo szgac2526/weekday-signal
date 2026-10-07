@@ -45,7 +45,21 @@
     if (MOCK) return mockApi(body);
     // text/plain にするのは、Apps Script が事前確認（CORS のプリフライト）に答えられないため
     const res = await fetch(cfg.GAS_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) });
-    return res.json();
+    // Apps Script が JSON 以外（ログイン画面やエラーの画面）を返すと、res.json() は
+    // 「The string did not match the expected pattern.」のような原因の分からない文言で落ちる。
+    // 中身を見て、どこを直せばよいかを出す
+    const text = await res.text();
+    try { return JSON.parse(text); } catch (_) { throw new Error(explainGas(res.status, text)); }
+  }
+  function explainGas(status, text) {
+    if (/accounts\.google\.com|ServiceLogin|signin/i.test(text))
+      return "Apps Script が Google のログインを求めています。ボットのデプロイで「アクセスできるユーザー：全員」になっているか、config.js の GAS_URL が /exec で終わっているかを確かめてください";
+    if (/doPost|関数が見つかりません|function not found/i.test(text))
+      return "Apps Script に doPost が見つかりません。Code.gs を貼って保存し、「デプロイを管理」から新バージョンでデプロイし直してください";
+    if (/is not defined|ReferenceError/i.test(text))
+      return "Apps Script の中で足りないものがあります（" + (text.match(/[\w$]+ is not defined/) || ["Shared.gs を貼ったか"])[0] + "）。Shared.gs を足して保存し、新バージョンでデプロイし直してください";
+    if (status === 404) return "Apps Script の URL が見つかりません。config.js の GAS_URL を確かめてください";
+    return "Apps Script から想定外の返事がありました（" + status + "）。Apps Script の「実行数」でエラーを見てください";
   }
   async function mockApi(body) {
     if (body.type === "config") {
