@@ -205,9 +205,12 @@ function verifyIdToken_(idToken) {
   });
   const v = JSON.parse(res.getContentText());
   if (res.getResponseCode() !== 200 || !v.sub) throw new Error('ログインの確認に失敗しました（開き直してください）');
-  const u = findUser_(v.sub);
-  // 友だち追加していない LINE・止めた LINE の送信は受けない
-  if (!u || !u.active) throw new Error('この LINE アカウントは登録されていません（公式アカウントを友だち追加してください）');
+  let u = findUser_(v.sub);
+  // Webhook がつながる前に友だち追加した LINE は、users シートに載っていない（友だち追加の知らせを受け損ねている）。
+  // 友だちかどうかは LINE に聞けるので、友だちならここで載せる。ブロック→解除をしてもらわずに済むように
+  if (!u && profile_(v.sub)) { registerUser_(v.sub); u = findUser_(v.sub); }
+  if (!u) throw new Error('この LINE アカウントは登録されていません（公式アカウントを友だち追加してください）');
+  if (!u.active) throw new Error('この LINE は止められています（親の画面の「子どもと LINE」で再開できます）');
   return { userId: v.sub, name: u.name || v.name || '' };
 }
 
@@ -302,14 +305,20 @@ function settings_() {
 
 function registerUser_(userId) {
   if (findUser_(userId)) return;
-  let name = '';
+  const p = profile_(userId);
+  sheet_(SHEET_USERS, USERS_HEADER).appendRow([userId, (p && p.displayName) || '', true, new Date()]);
+}
+
+/** LINE のプロフィール。公式アカウントの友だちでなければ null（LINE が 404 を返す） */
+function profile_(userId) {
   try {
-    const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/profile/' + userId, {
+    const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/profile/' + encodeURIComponent(userId), {
       headers: { Authorization: 'Bearer ' + prop_('LINE_CHANNEL_ACCESS_TOKEN') }, muteHttpExceptions: true,
     });
-    name = JSON.parse(res.getContentText()).displayName || '';
-  } catch (_) {}
-  sheet_(SHEET_USERS, USERS_HEADER).appendRow([userId, name, true, new Date()]);
+    return res.getResponseCode() === 200 ? JSON.parse(res.getContentText()) : null;
+  } catch (_) {
+    return null;
+  }
 }
 
 function findUser_(userId) {
