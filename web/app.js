@@ -233,6 +233,8 @@
   (async function main() {
     try {
       if (!MOCK) {
+        // config.js が読めていない（書き間違い・古いものが端末に残っている）と、ここで分かる形で止める
+        if (!cfg.LIFF_ID || !cfg.GAS_URL) throw new Error("設定（config.js）が読めませんでした。少し待ってから開き直してください");
         await line.init({ liffId: cfg.LIFF_ID });
         if (!line.isLoggedIn()) { line.login({ redirectUri: location.href }); return; }
       }
