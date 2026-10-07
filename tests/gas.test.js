@@ -1,0 +1,66 @@
+// Code.gs の「純粋な処理」を Node で確かめる（Google のサービスは使わない部分だけ）
+const fs = require("fs"), vm = require("vm"), assert = require("assert");
+const ctx = {}; vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(__dirname + "/../gas/Shared.gs", "utf8") + fs.readFileSync(__dirname + "/../gas/Code.gs", "utf8") + "\nthis.api={buildRow_,countStreak_,jstDate_,weekdayKey_,COLUMNS,monthStamps_,monthWeekdays_,doneDates_,stampCardFlex_};", ctx);
+const { buildRow_, countStreak_, jstDate_, weekdayKey_, COLUMNS, monthStamps_, monthWeekdays_, doneDates_, stampCardFlex_ } = ctx.api;
+const user = { userId: "U1", name: "息子" };
+let ok = 0; const t = (name, fn) => { fn(); ok++; console.log("✓", name); };
+
+t("日本時間の日付と曜日（UTC 15:30 は翌日の0:30）", () => {
+  const d = new Date("2026-10-06T15:30:00Z");
+  assert.strictEqual(jstDate_(d), "2026-10-07"); assert.strictEqual(weekdayKey_(d), "wed");
+});
+t("朝の入力が行になる。範囲外の数字は空にする", () => {
+  const r = buildRow_(null, user, "2026-10-05", "morning", { body: "3", mood: "9", energy: 5, antenna: ["ワクワク", "音"], quest: "Q", motto: "" }, new Date("2026-10-04T22:10:00Z"));
+  assert.strictEqual(r.weekday, "月"); assert.strictEqual(r.body, 3); assert.strictEqual(r.mood, ""); assert.strictEqual(r.energy, 5);
+  assert.strictEqual(r.antenna, "ワクワク、音"); assert.strictEqual(r.morning_at, "2026-10-05 07:10"); assert.strictEqual(r.night_at, "");
+});
+t("夜を書いても朝の値は消えない", () => {
+  const m = buildRow_(null, user, "2026-10-05", "morning", { body: 2, antenna: ["力"], quest: "Q" }, new Date("2026-10-04T22:00:00Z"));
+  const n = buildRow_(m, user, "2026-10-05", "night", { quest_result: "GET!", feelings: ["楽しい"], key: "攻める", win: "YES!" }, new Date("2026-10-05T12:00:00Z"));
+  assert.strictEqual(n.body, 2); assert.strictEqual(n.quest, "Q"); assert.strictEqual(n.quest_result, "GET!");
+  assert.strictEqual(n.feelings, "楽しい"); assert.strictEqual(n.night_at, "2026-10-05 21:00");
+  assert.deepStrictEqual(Object.keys(n).sort(), [...COLUMNS].sort());
+});
+t("長すぎる文字は500字で切る", () => {
+  const r = buildRow_(null, user, "2026-10-05", "night", { treasure: "あ".repeat(800) }, new Date());
+  assert.strictEqual(r.treasure.length, 500);
+});
+t("連続日数は土日を飛ばして数える。今日まだなら昨日から", () => {
+  // 2026-10-02(金) 10-05(月) 10-06(火) を書いて、今日 10-07(水) はまだ
+  assert.strictEqual(countStreak_(["2026-10-02", "2026-10-05", "2026-10-06"], "2026-10-07"), 3);
+  assert.strictEqual(countStreak_(["2026-10-02", "2026-10-05", "2026-10-06", "2026-10-07"], "2026-10-07"), 4);
+  assert.strictEqual(countStreak_(["2026-10-05", "2026-10-07"], "2026-10-07"), 1); // 火曜が抜けた
+  assert.strictEqual(countStreak_([], "2026-10-07"), 0);
+});
+t("2026年10月の平日は22日。1日は木曜", () => {
+  const d = monthWeekdays_("2026-10");
+  assert.strictEqual(d.length, 22); assert.strictEqual(d[0], "2026-10-01"); assert.strictEqual(d.at(-1), "2026-10-30");
+});
+t("スタンプは朝と夜の両方を書いた平日だけ。土日の記録は数えない", () => {
+  const rows = [
+    { user_id: "U1", date: "2026-10-05", morning_at: "x", night_at: "y" },
+    { user_id: "U1", date: "2026-10-06", morning_at: "x", night_at: "" },   // 夜なし
+    { user_id: "U1", date: "2026-10-10", morning_at: "x", night_at: "y" },  // 土曜
+    { user_id: "U2", date: "2026-10-07", morning_at: "x", night_at: "y" },  // 別の人
+  ];
+  const st = monthStamps_(doneDates_(rows, "U1"), "2026-10", "");
+  assert.strictEqual(st.count, 1); assert.strictEqual(st.goal, 22); assert.strictEqual(st.achieved, false);
+});
+t("目標を指定できる。平日の数より大きい指定は平日の数にそろえる", () => {
+  const dates = monthWeekdays_("2026-10").slice(0, 20);
+  assert.strictEqual(monthStamps_(dates, "2026-10", "20").achieved, true);
+  assert.strictEqual(monthStamps_(dates, "2026-10", "99").goal, 22);
+});
+t("スタンプカードは週ごとに5列、押した日に ★、代替テキストに数", () => {
+  const st = monthStamps_(["2026-10-01", "2026-10-02"], "2026-10", "");
+  const f = stampCardFlex_(st);
+  assert.strictEqual(f.altText, "今月のスタンプ 2/22");
+  const rows = f.contents.body.contents.filter((c) => c.type === "box" && c.contents.length === 5 && c.contents[0].type === "box");
+  assert.strictEqual(rows.length, 5); // 10月は5週にまたがる
+  const json = JSON.stringify(f); assert.strictEqual((json.match(/★/g) || []).length, 2 + 1); // ★2個 ＋ 説明文の★
+});
+t("Shared.gs はボットと親の画面で同じ中身（片方だけ直すと数え方が食い違う）", () => {
+  assert.strictEqual(fs.readFileSync(__dirname + "/../gas/Shared.gs", "utf8"), fs.readFileSync(__dirname + "/../gas-parent/Shared.gs", "utf8"));
+});
+console.log(`\n${ok} 件すべて通過`);

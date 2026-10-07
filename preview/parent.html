@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<base target="_top">
+<title>WEEKDAY SIGNAL 親の画面</title>
+<style>
+/* 上から「いま何が要るか」順：ギフト → 今月の数字 → スタンプ → 調子の推移 → よく出た言葉 → 毎日の記録 */
+:root {
+  --bg: #f7f6f3; --card: #ffffff; --ink: #24272e; --muted: #6b7280; --line: #e6e4df;
+  --accent: #d9667a; --accent-soft: #fbe7eb; --star: #e8798a; --sun: #e0a23a; --moon: #5b6bb5;
+  --chart: #4f7cc4; --grid: #ebe9e4;
+  --font: "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #15171c; --card: #1e2128; --ink: #eceef2; --muted: #9aa2ae; --line: #2e323b;
+    --accent: #f08a9b; --accent-soft: #3a2228; --star: #f08a9b; --sun: #f0b85a; --moon: #95a3e6; --chart: #7ea3e0; --grid: #2a2e36; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.65; }
+.wrap { max-width: 980px; margin: 0 auto; padding: 20px 16px 48px; display: grid; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+header h1 { font-size: 20px; margin: 0; letter-spacing: .02em; }
+header .who { margin-left: auto; font-size: 12px; color: var(--muted); }
+.controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+select, button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 6px 12px; min-height: 36px; }
+button { cursor: pointer; }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.month { font-weight: 700; min-width: 7em; text-align: center; font-variant-numeric: tabular-nums; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; min-width: 0; }
+.card h2 { font-size: 14px; margin: 0 0 12px; color: var(--muted); font-weight: 700; letter-spacing: .04em; }
+.gift { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 16px; padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.gift b { font-size: 16px; }
+.gift button { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
+.gift.sent { background: var(--card); border-color: var(--line); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.tile .v { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.tile .v small { font-size: 15px; color: var(--muted); font-weight: 600; }
+.tile .s { font-size: 12.5px; color: var(--muted); }
+.meter { height: 8px; background: var(--grid); border-radius: 999px; overflow: hidden; margin-top: 8px; }
+.meter i { display: block; height: 100%; background: var(--star); border-radius: 999px; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.cal { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.cal .h { font-size: 12px; color: var(--muted); text-align: center; }
+.cal .d { border-radius: 10px; background: var(--bg); min-height: 58px; padding: 4px 6px; font-size: 12px; color: var(--muted); position: relative; }
+.cal .d.on { background: var(--accent-soft); color: var(--ink); }
+.cal .d .star { position: absolute; right: 6px; top: 2px; color: var(--star); font-size: 18px; }
+.cal .d .marks { position: absolute; left: 6px; bottom: 4px; font-size: 13px; letter-spacing: 2px; }
+.cal .d.future { opacity: .45; }
+.legend { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.trend { display: grid; gap: 6px; }
+.trend .row { display: grid; grid-template-columns: 3em minmax(0, 1fr); align-items: center; gap: 6px; }
+.trend .row span { font-size: 13px; color: var(--muted); }
+.trend svg { width: 100%; height: 56px; display: block; overflow: visible; }
+.bars { display: grid; gap: 6px; }
+.bar { display: grid; grid-template-columns: 6em minmax(0, 1fr) 2em; gap: 8px; align-items: center; font-size: 13px; }
+.bar .t { height: 12px; background: var(--grid); border-radius: 999px; overflow: hidden; }
+.bar .t i { display: block; height: 100%; background: var(--chart); border-radius: 0 4px 4px 0; }
+.bar .n { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.days { display: grid; gap: 10px; }
+.day { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 6px; }
+.day .top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.day .date { font-weight: 800; font-variant-numeric: tabular-nums; }
+.pill { font-size: 12px; border-radius: 999px; padding: 1px 9px; background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+.pill.get { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 700; }
+.day .key { font-size: 15.5px; font-weight: 700; }
+.day .meta { font-size: 13px; color: var(--muted); }
+.day .treasure { font-size: 14.5px; }
+.empty { color: var(--muted); text-align: center; padding: 24px 0; }
+.err { color: #b42318; }
+.foot { font-size: 12px; color: var(--muted); }
+.foot a { color: inherit; }
+</style>
+</head>
+<body>
+<script src="sample.js"></script><div class="wrap" id="app"><p class="empty">読み込み中…</p></div>
+<script>
+(function () {
+  "use strict";
+  const app = document.getElementById("app");
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const WD = { mon: "月", tue: "火", wed: "水", thu: "木", fri: "金" };
+  let D = null;
+
+  // ---------------------------------------------------------------- サーバー（見本のときは手元のデータ）
+  const hasGas = typeof google !== "undefined" && google.script && google.script.run;
+  function call(fn, ...args) {
+    if (!hasGas) return Promise.resolve(window.SAMPLE ? window.SAMPLE(fn, ...args) : null);
+    return new Promise((ok, ng) => google.script.run.withSuccessHandler(ok).withFailureHandler(ng)[fn](...args));
+  }
+  function load(ym, uid) {
+    return call("getDashboard", ym, uid).then((d) => { D = d; render(); })
+      .catch((e) => { app.innerHTML = `<p class="err">開けませんでした：${esc(e.message || e)}</p>`; });
+  }
+
+  // ---------------------------------------------------------------- 計算
+  const count = (rows, key) => {
+    const m = {};
+    rows.forEach((r) => String(r[key] || "").split("、").filter(Boolean).forEach((v) => (m[v] = (m[v] || 0) + 1)));
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  };
+  const wdOf = (d) => ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][new Date(d + "T12:00:00+09:00").getUTCDay()];
+  const shiftYm = (ym, n) => { const d = new Date(Date.UTC(+ym.slice(0, 4), +ym.slice(5, 7) - 1 + n, 1)); return d.toISOString().slice(0, 7); };
+
+  // ---------------------------------------------------------------- 部品
+  function giftBox() {
+    const s = D.stamps, m = Number(D.ym.slice(5));
+    if (!s.achieved) return "";
+    if (D.gift && D.gift.status === "贈呈済み")
+      return `<div class="gift sent">🎁 <span>${m}月のごほうび（${esc(D.giftLabel)}）は <b>贈呈済み</b>（${esc(D.gift.sentAt)}）</span></div>`;
+    return `<div class="gift">🎁 <span><b>${m}月のスタンプが全部そろいました（${s.count}/${s.goal}）</b><br>${esc(D.giftLabel)}のギフトを贈ったら押してください。本人の LINE に知らせます。</span>
+      <button type="button" id="sent">贈った</button></div>`;
+  }
+
+  function tiles() {
+    const s = D.stamps;
+    const withResult = D.rows.filter((r) => r.quest_result);
+    const got = withResult.filter((r) => /GET|別のもの/.test(r.quest_result)).length;
+    return `<div class="tiles">
+      <div class="card tile"><h2>今月のスタンプ</h2><div class="v">${s.count}<small> / ${s.goal}</small></div>
+        <div class="meter" role="img" aria-label="${s.count} / ${s.goal}"><i style="width:${Math.min(100, (s.count / s.goal) * 100)}%"></i></div>
+        <div class="s">${s.achieved ? "達成！" : `あと ${s.goal - s.count} 日`}（朝と夜の両方で1つ）</div></div>
+      <div class="card tile"><h2>連続（夜まで書いた平日）</h2><div class="v">${D.streak}<small> 日</small></div><div class="s">土日は数えません</div></div>
+      <div class="card tile"><h2>QUEST を見つけた</h2><div class="v">${got}<small> / ${withResult.length} 日</small></div><div class="s">「GET!」か「別のものを発見」</div></div>
+    </div>`;
+  }
+
+  function calendar() {
+    const on = new Set(D.stamps.stamped);
+    const byDate = Object.fromEntries(D.rows.map((r) => [r.date, r]));
+    const cells = [];
+    D.stamps.days.forEach((d, i) => {
+      const wd = wdOf(d);
+      if (i === 0) for (let k = 0; k < ["mon", "tue", "wed", "thu", "fri"].indexOf(wd); k++) cells.push(`<div></div>`);
+      const r = byDate[d] || {};
+      const marks = (r.morning_at ? "☀" : "") + (r.night_at ? "🌙" : "");
+      cells.push(`<div class="d${on.has(d) ? " on" : ""}${d > D.today ? " future" : ""}" title="${esc(d)}${marks ? "　" + (r.morning_at ? "朝あり " : "") + (r.night_at ? "夜あり" : "") : ""}">
+        ${Number(d.slice(8))}${on.has(d) ? `<span class="star" aria-label="スタンプ">★</span>` : ""}<span class="marks">${marks}</span></div>`);
+    });
+    return `<div class="card"><h2>${Number(D.ym.slice(5))}月のスタンプカード</h2>
+      <div class="cal">${["月", "火", "水", "木", "金"].map((w) => `<div class="h">${w}</div>`).join("")}${cells.join("")}</div>
+      <div class="legend">★ スタンプ（朝と夜の両方）　☀ 朝を書いた　🌙 夜を書いた</div></div>`;
+  }
+
+  // 体・気分・元気を1本ずつ（同じ物差し 1〜5）。2本を1つの図に重ねない
+  function trend() {
+    const days = D.stamps.days.filter((d) => d <= D.today);
+    if (!days.length) return "";
+    const byDate = Object.fromEntries(D.rows.map((r) => [r.date, r]));
+    const W = 600, H = 56, pad = 6;
+    const x = (i) => pad + (days.length === 1 ? (W - 2 * pad) / 2 : (i * (W - 2 * pad)) / (days.length - 1));
+    const y = (v) => H - pad - ((v - 1) / 4) * (H - 2 * pad);
+    const line = (key, label) => {
+      const pts = days.map((d, i) => ({ d, i, v: Number((byDate[d] || {})[key]) })).filter((p) => p.v >= 1);
+      const path = pts.map((p, k) => (k ? "L" : "M") + x(p.i).toFixed(1) + " " + y(p.v).toFixed(1)).join(" ");
+      const grid = [1, 3, 5].map((v) => `<line x1="${pad}" x2="${W - pad}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/>`).join("");
+      const dots = pts.map((p) => `<circle cx="${x(p.i)}" cy="${y(p.v)}" r="4" fill="var(--chart)" stroke="var(--card)" stroke-width="2"><title>${p.d}（${WD[wdOf(p.d)]}）${label} ${p.v}</title></circle>`).join("");
+      return `<div class="row"><span>${label}</span><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${label}の推移">${grid}
+        <path d="${path}" fill="none" stroke="var(--chart)" stroke-width="2" vector-effect="non-scaling-stroke"/>${dots}</svg></div>`;
+    };
+    return `<div class="card"><h2>今の俺をチェック（1〜5）の推移</h2><div class="trend">${line("body", "体")}${line("mood", "気分")}${line("energy", "元気")}</div>
+      <div class="legend">線が切れている日は、朝を書いていない日です。数字に良い・悪いはありません</div></div>`;
+  }
+
+  function bars(title, entries) {
+    if (!entries.length) return `<div class="card"><h2>${title}</h2><p class="empty">まだありません</p></div>`;
+    const max = entries[0][1];
+    return `<div class="card"><h2>${title}</h2><div class="bars">${entries.slice(0, 8).map(([k, n]) =>
+      `<div class="bar"><span>${esc(k)}</span><div class="t"><i style="width:${(n / max) * 100}%"></i></div><span class="n">${n}</span></div>`).join("")}</div></div>`;
+  }
+
+  function days() {
+    if (!D.rows.length) return `<div class="card"><h2>毎日の記録</h2><p class="empty">この月の記録はまだありません</p></div>`;
+    return `<div class="card"><h2>毎日の記録（新しい順）</h2><div class="days">${D.rows.map((r) => `
+      <article class="day">
+        <div class="top"><span class="date">${Number(r.date.slice(5, 7))}/${Number(r.date.slice(8))}（${esc(r.weekday)}）</span>
+          ${r.quest_result ? `<span class="pill${/GET|別のもの/.test(r.quest_result) ? " get" : ""}">${esc(r.quest_result)}</span>` : ""}
+          ${r.win ? `<span class="pill">勝った？ ${esc(r.win)}</span>` : ""}
+          ${r.morning_at ? "" : `<span class="pill">朝なし</span>`}${r.night_at ? "" : `<span class="pill">夜なし</span>`}</div>
+        ${r.key ? `<div class="key">俺って、${esc(r.key)}かも。</div>` : ""}
+        ${r.treasure ? `<div class="treasure">🏆 ${esc(r.treasure)}</div>` : ""}
+        ${r.quest ? `<div class="meta">QUEST：${esc(r.quest)}${r.antenna ? `　アンテナ：${esc(r.antenna)}` : ""}</div>` : ""}
+        ${r.body || r.mood || r.energy ? `<div class="meta">体 ${esc(r.body || "-")}・気分 ${esc(r.mood || "-")}・元気 ${esc(r.energy || "-")}${r.motto ? `　意気込み：${esc(r.motto)}` : ""}</div>` : ""}
+        ${r.feelings ? `<div class="meta">今日あったもの：${esc(r.feelings)}</div>` : ""}
+        ${r.week_best || r.next_self || r.week_reflection ? `<div class="meta">今週の宝物：${esc(r.week_best)}／来週知りたい自分：${esc(r.next_self)}／ふりかえり：${esc(r.week_reflection)}</div>` : ""}
+      </article>`).join("")}</div></div>`;
+  }
+
+  function render() {
+    const users = D.users.map((u) => `<option value="${esc(u.userId)}"${u.userId === D.userId ? " selected" : ""}>${esc(u.name)}</option>`).join("");
+    app.innerHTML = `
+      <header><h1>WEEKDAY SIGNAL</h1>
+        <div class="controls">
+          ${D.users.length > 1 ? `<select id="user" aria-label="誰の記録か">${users}</select>` : `<span>${esc((D.users[0] || {}).name || "")}</span>`}
+          <button type="button" id="prev" aria-label="前の月">‹</button><span class="month">${D.ym.slice(0, 4)}年${Number(D.ym.slice(5))}月</span>
+          <button type="button" id="next" aria-label="次の月">›</button></div>
+        <span class="who">${esc(D.viewer)} で表示中</span></header>
+      ${giftBox()}${tiles()}
+      <div class="two">${calendar()}${trend()}</div>
+      <div class="two">${bars("よく選んだアンテナ", count(D.rows, "antenna"))}${bars("今日あったもの", count(D.rows, "feelings"))}</div>
+      ${days()}
+      <p class="foot">元のデータは <a href="${esc(D.sheetUrl)}" target="_blank" rel="noopener">スプレッドシート</a>（Excel が必要なら「ファイル → ダウンロード → Microsoft Excel」）</p>`;
+    const uid = () => (document.getElementById("user") || {}).value || D.userId;
+    document.getElementById("prev").onclick = () => load(shiftYm(D.ym, -1), uid());
+    document.getElementById("next").onclick = () => load(shiftYm(D.ym, 1), uid());
+    const sel = document.getElementById("user"); if (sel) sel.onchange = () => load(D.ym, sel.value);
+    const sent = document.getElementById("sent");
+    if (sent) sent.onclick = () => {
+      if (!window.confirm || !window.confirm("ギフトを贈ったことにして、本人に知らせます。よろしいですか？")) return;
+      sent.disabled = true; sent.textContent = "記録中…";
+      call("markGiftSent", D.ym, D.userId).then((d) => { D = d; render(); })
+        .catch((e) => { sent.disabled = false; sent.textContent = "贈った"; alert(e.message || e); });
+    };
+  }
+
+  load("", "");
+})();
+</script>
+</body>
+</html>
