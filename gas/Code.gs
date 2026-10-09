@@ -54,7 +54,7 @@ function doPost(e) {
     if (body.type === 'submit') {
       const row = saveSlot_(child, body.date, body.slot, body.data || {});
       const st = monthStampsFor_(child.id, String(body.date).slice(0, 7));
-      return json_({ ok: true, streak: streak_(child.id), row: row, stamps: { count: st.count, goal: st.goal } });
+      return json_({ ok: true, streak: streak_(child.id), row: row, stamps: { count: st.count, goal: st.goal, days: st.days, stamped: st.stamped } });
     }
     return json_({ ok: false, error: 'unknown type' });
   } catch (err) {

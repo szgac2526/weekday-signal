@@ -41,8 +41,8 @@ const DEFAULT_GIFT_LABEL = '1,000円分';
 const DEFAULT_QUESTIONS = {
   "_note": "Aestus の設問の初期値（ワーク「WEEKDAY SIGNAL」の 2026-10-07 の最新シート2枚から起こした）。親が管理画面で直すと、スプレッドシートの settings に保存した方が使われる。gas/Shared.gs の DEFAULT_QUESTIONS と同じ中身にする（テストが見る）",
   "condition": {
-    "label": "今の俺をチェック",
-    "note": "数字は今の状態。良い・悪いはありません",
+    "label": "今の状態",
+    "note": "数字は今の状態。良い悪いじゃない",
     "items": [
       {
         "key": "body",
@@ -62,8 +62,8 @@ const DEFAULT_QUESTIONS = {
     ]
   },
   "antenna": {
-    "label": "今日のアンテナを1つ選ぶ",
-    "note": "興味のあるものを選んでOK",
+    "label": "今日のフォーカス",
+    "note": "気になるものを1つ",
     "options": [
       "安心",
       "ワクワク",
@@ -79,18 +79,18 @@ const DEFAULT_QUESTIONS = {
     "own": false
   },
   "quest": {
-    "label": "今日の SENSITIVITY QUEST",
-    "note": "今日はこれを探す！",
+    "label": "今日のドリル",
+    "note": "今日、探しにいくもの",
     "own": true,
     "before": "今日は、",
-    "after": "を見つけてみる。"
+    "after": "を見つける。"
   },
   "motto": {
     "enabled": true,
-    "label": "今日の意気込み（ひとこと）"
+    "label": "ひとこと"
   },
   "quest_result": {
-    "label": "QUESTの結果",
+    "label": "ドリルの結果",
     "options": [
       "GET!",
       "惜しい!",
@@ -99,8 +99,8 @@ const DEFAULT_QUESTIONS = {
     ]
   },
   "feelings": {
-    "label": "今日あったものに✓",
-    "note": "いくつでもOK",
+    "label": "今日あったこと",
+    "note": "いくつでも",
     "options": [
       "楽しい",
       "安心",
@@ -117,12 +117,12 @@ const DEFAULT_QUESTIONS = {
     ]
   },
   "treasure": {
-    "label": "今日の宝物（体験）",
-    "note": "今日、一番残っている体験は？"
+    "label": "今日のハイライト",
+    "note": "一番残っている場面は？"
   },
   "key": {
-    "label": "今日の発見（俺のKEY）",
-    "note": "その体験で分かった「俺」は？",
+    "label": "インサイト",
+    "note": "その場面で分かった自分は？",
     "before": "俺って、",
     "after": "かも。"
   },
@@ -203,10 +203,8 @@ const DEFAULT_QUESTIONS = {
     }
   },
   "rules": [
-    "正解はありません",
-    "全部書かなくてもOK",
-    "短くてOK",
-    "見つからなくてもOK（それも発見）"
+    "正解はない",
+    "書けるところだけでいい"
   ]
 };
 
