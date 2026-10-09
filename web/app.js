@@ -107,8 +107,17 @@
     const kidPick = kids.length > 1
       ? `<div class="who" role="group" aria-label="記録する人">${kids.map((c) => `<button type="button" data-child="${esc(c.id)}" aria-pressed="${c.id === state.child.id}">${esc(c.name)}</button>`).join("")}</div>`
       : "";
+    // 朝と夜は、空の色・記号（地平線から出る太陽／月と星）・ラベルの3つで見分けられるようにする
+    const sky = morning
+      ? `<svg class="sky" viewBox="0 0 400 200" preserveAspectRatio="xMaxYMax slice" aria-hidden="true">
+          <defs><radialGradient id="sun" cx="50%" cy="100%" r="60%"><stop offset="0" stop-color="#ffd27a"/><stop offset=".55" stop-color="#ff9a4d"/><stop offset="1" stop-color="#ff9a4d" stop-opacity="0"/></radialGradient></defs>
+          <circle cx="340" cy="200" r="120" fill="url(#sun)" opacity=".4"/><circle cx="340" cy="200" r="38" fill="#ffc46b"/></svg>`
+      : `<svg class="sky" viewBox="0 0 400 200" preserveAspectRatio="xMaxYMax slice" aria-hidden="true">
+          <g fill="#fff"><circle cx="262" cy="24" r="1.2"/><circle cx="252" cy="96" r="1"/><circle cx="372" cy="150" r="1.2"/><circle cx="236" cy="150" r=".9"/><circle cx="384" cy="34" r=".9"/><circle cx="300" cy="64" r=".8" opacity=".6"/></g>
+          <path d="M352 128a22 22 0 1 0 19 34a18 18 0 1 1-19-34z" fill="#e9eefc"/></svg>`;
     return `<header class="hero">
-      <div class="top"><span class="mark">AESTUS</span><span class="session">${morning ? "WARM-UP" : "COOL-DOWN"}<i>${morning ? "朝" : "夜"}・2〜3 MIN</i></span></div>
+      ${sky}
+      <div class="top"><span class="mark">AESTUS</span><span class="session"><b>${morning ? "AM" : "PM"}</b>${morning ? "WARM-UP" : "COOL-DOWN"}<i>${morning ? "朝" : "夜"}・2〜3 MIN</i></span></div>
       <div class="dayline"><span class="en">${DAY_EN[state.day]}</span><span class="date">${state.date.slice(5).replace("-", ".")}</span></div>
       <h1>${esc(d.name)}</h1>
       <p class="theme">${esc(d.theme)}${d.question ? `<span>${esc(d.question)}</span>` : ""}</p>
