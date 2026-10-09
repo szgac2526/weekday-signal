@@ -220,21 +220,21 @@
     return { quest_result: one("quest_result"), feelings: all("feelings"), treasure: one("treasure"), key: one("key"), win: one("win"), extra };
   }
 
-  /** トークに残る「完了」メッセージ。1行目に名前を入れ、ボットはそれでどの子の分かを決める（返信は無料枠を使わない） */
+  /** トークに残る「完了」メッセージ（【WARM-UP】／【COOL-DOWN】）。1行目に名前を入れ、ボットはそれでどの子の分かを決める（返信は無料枠を使わない） */
   function summary(slot, d) {
     const lines = [];
     const name = state.child.name;
     if (slot === "morning") {
-      lines.push("【朝のチェック完了】" + name);
+      lines.push("【WARM-UP】" + name);
       if (d.body || d.mood || d.energy) lines.push(Q.condition.items.map((it) => it.label + (d[it.key] || "-")).join(" "));
-      if (d.antenna.length) lines.push("アンテナ：" + d.antenna.join("・"));
-      if (d.quest) lines.push("QUEST：" + d.quest);
-      if (d.motto) lines.push("意気込み：" + d.motto);
+      if (d.antenna.length) lines.push("フォーカス：" + d.antenna.join("・"));
+      if (d.quest) lines.push("ドリル：" + d.quest);
+      if (d.motto) lines.push("ひとこと：" + d.motto);
     } else {
-      lines.push("【夜のチェック完了】" + name);
+      lines.push("【COOL-DOWN】" + name);
       if (d.quest_result) lines.push("結果：" + d.quest_result);
-      if (d.feelings.length) lines.push("今日あったもの：" + d.feelings.join("・"));
-      if (d.treasure) lines.push("宝物：" + d.treasure);
+      if (d.feelings.length) lines.push("今日あったこと：" + d.feelings.join("・"));
+      if (d.treasure) lines.push("ハイライト：" + d.treasure);
       if (d.key) lines.push(`${Q.key.before}${d.key}${Q.key.after}`);
       if (d.win) lines.push("自分に勝った？：" + d.win);
     }

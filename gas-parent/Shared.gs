@@ -15,7 +15,11 @@ const SHEET_CHILDREN = 'children';  // 子ども（親が管理画面で足す�
 const SHEET_GIFTS = 'gifts';
 const SHEET_SETTINGS = 'settings';  // 設問・ごほうび（親が管理画面で変える）
 const USERS_HEADER = ['LINEユーザーID', 'LINEの表示名', '有効', '登録日時'];
-const CHILDREN_HEADER = ['子ID', '名前', '有効', 'LINEユーザーID', '作成日時'];
+const CHILDREN_HEADER = ['子ID', '名前', '有効', 'LINEユーザーID', '作成日時', '朝の通知', '夜の通知'];
+// 通知の時刻の初期値（親が子どもごとに変える。'off' は通知しない）
+const DEFAULT_REMIND = { morning: '07:00', night: '21:00' };
+// 通知を見回る間隔（分）。時刻の選択肢もこの刻みにする
+const REMIND_STEP_MIN = 15;
 const GIFTS_HEADER = ['月', '子ID', '名前', 'スタンプ', '目標', '達成日時', '状態', '贈った日時'];
 const SETTINGS_HEADER = ['項目', '値'];
 
@@ -301,9 +305,27 @@ function rowToObj_(arr) {
 
 function childrenFromRows_(rows) {
   return rows.filter(function (r) { return r[0]; }).map(function (r) {
-    return { id: String(r[0]), name: String(r[1] || ''), active: r[2] === true || r[2] === 'TRUE', lineUserId: String(r[3] || '') };
+    return {
+      id: String(r[0]), name: String(r[1] || ''), active: r[2] === true || r[2] === 'TRUE', lineUserId: String(r[3] || ''),
+      morningAt: normTime_(r[5], DEFAULT_REMIND.morning), nightAt: normTime_(r[6], DEFAULT_REMIND.night),
+    };
   });
 }
+
+/**
+ * 通知の時刻を "HH:MM" か 'off' にそろえる。空・読めない値は初期値。
+ * シートは "07:00" を時刻型に変えてしまうことがあるので、日付型も読む
+ */
+function normTime_(v, fallback) {
+  if (v && typeof v.getHours === 'function') return pad2_(v.getHours()) + ':' + pad2_(v.getMinutes());
+  const s = String(v == null ? '' : v).trim();
+  if (s === 'off') return 'off';
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (m && Number(m[1]) <= 23 && Number(m[2]) <= 59) return pad2_(m[1]) + ':' + m[2];
+  return fallback;
+}
+function pad2_(n) { return String(n).padStart(2, '0'); }
+function toMin_(hm) { return Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5)); }
 
 /** その LINE から書ける子ども（有効な子だけ）。兄弟で1つの LINE を共有していれば2人返る */
 function childrenForLine_(children, lineUserId) {
@@ -321,20 +343,29 @@ function resolveChild_(kids, text) {
 }
 
 /**
- * 声かけを送る先。**LINE 1つにつき1通**（兄弟で共有していても2通にしない。無料の通数を使うため）。
- * まだその時間帯を書いていない子の名前を添える。全員書いていれば送らない
+ * いま送る声かけ。子どもごとの時刻（朝・夜）を過ぎていて、まだ書いておらず、今日まだ送っていないもの。
+ *   nowHM: 日本時間の "HH:MM"／sent: 今日すでに送った { '子ID:morning': true, … }
+ * 同じ LINE・同じ時間帯でそろった子は1通にまとめる（兄弟で共有の LINE に2通送らない。無料の通数を使うため）。
+ * 時刻から3時間を過ぎたものは送らない（止まっていた後に、朝の声かけが昼に届かないように）
  */
-function remindTargets_(children, todayRows, slot) {
-  const doneKey = slot === 'morning' ? 'morning_at' : 'night_at';
-  const done = {};
-  todayRows.forEach(function (r) { if (r[doneKey]) done[r.child_id] = true; });
-  const byLine = {}, order = [];
-  children.forEach(function (c) {
-    if (!c.active || !c.lineUserId || done[c.id]) return;
-    if (!byLine[c.lineUserId]) { byLine[c.lineUserId] = []; order.push(c.lineUserId); }
-    byLine[c.lineUserId].push(c.name);
+function dueReminders_(children, todayRows, nowHM, sent) {
+  const now = toMin_(nowHM);
+  const out = [], byKey = {};
+  ['morning', 'night'].forEach(function (slot) {
+    const doneKey = slot === 'morning' ? 'morning_at' : 'night_at';
+    const done = {};
+    todayRows.forEach(function (r) { if (r[doneKey]) done[r.child_id] = true; });
+    children.forEach(function (c) {
+      const at = slot === 'morning' ? c.morningAt : c.nightAt;
+      if (!c.active || !c.lineUserId || !at || at === 'off' || done[c.id] || sent[c.id + ':' + slot]) return;
+      const late = now - toMin_(at);
+      if (late < 0 || late >= 180) return;
+      const k = c.lineUserId + ':' + slot;
+      if (!byKey[k]) { byKey[k] = { lineUserId: c.lineUserId, slot: slot, names: [], childIds: [] }; out.push(byKey[k]); }
+      byKey[k].names.push(c.name); byKey[k].childIds.push(c.id);
+    });
   });
-  return order.map(function (id) { return { lineUserId: id, names: byLine[id] }; });
+  return out;
 }
 
 /** 新しい子ID。c1, c2, … と数字で増やす（名前を変えても記録がつながるように、名前は ID にしない） */

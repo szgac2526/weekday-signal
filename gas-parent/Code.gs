@@ -79,7 +79,7 @@ function markGiftSent(ym, childId) {
           method: 'post', contentType: 'application/json', muteHttpExceptions: true,
           headers: { Authorization: 'Bearer ' + token },
           payload: JSON.stringify({ to: child.lineUserId, messages: [{ type: 'text',
-            text: '🎁 ' + child.name + '、' + Number(ym.slice(5)) + '月のごほうび（' + label + '）を贈ったよ！\n毎日のアンテナ、おつかれさま。' }] }),
+            text: child.name + '、' + Number(ym.slice(5)) + '月のリワード（' + label + '）を贈った。\n毎日の記録、おつかれ。' }] }),
         });
       }
       return getDashboard(ym, childId);
@@ -108,11 +108,13 @@ function getAdmin() {
     stampGoal: settings.stampGoal,
     giftLabel: settings.giftLabel,
     defaultGiftLabel: DEFAULT_GIFT_LABEL,
+    defaultRemind: DEFAULT_REMIND, remindStep: REMIND_STEP_MIN,
   };
 }
 
 /**
- * 子どもの一覧を保存する。list = [{ id?, name, active, lineUserId }]
+ * 子どもの一覧を保存する。list = [{ id?, name, active, lineUserId, morningAt, nightAt }]
+ * 通知の時刻は "HH:MM"（REMIND_STEP_MIN 分刻み）か 'off'
  * **子は消さない**（記録が子IDでつながっているため）。使わなくなった子は「有効」を外す
  */
 function saveChildren(list) {
@@ -136,20 +138,33 @@ function saveChildren(list) {
       const id = x.id && byId[x.id] ? x.id : newChildId_(current);
       const c = byId[id] || { id: id, created: new Date() };
       c.name = name; c.active = x.active !== false; c.lineUserId = lineUserId;
+      c.morningAt = remindTime_(x.morningAt, DEFAULT_REMIND.morning); c.nightAt = remindTime_(x.nightAt, DEFAULT_REMIND.night);
       if (!byId[id]) { byId[id] = c; current.push(c); }
     });
-    const out = current.map(function (c) { return [c.id, c.name, c.active, c.lineUserId, c.created || '']; });
+    // 時刻は先頭に ' を付けて文字のまま入れる（付けないとシートが時刻型に変える）
+    const out = current.map(function (c) {
+      return [c.id, c.name, c.active, c.lineUserId, c.created || '', "'" + (c.morningAt || DEFAULT_REMIND.morning), "'" + (c.nightAt || DEFAULT_REMIND.night)];
+    });
     // 作成日時は書き換えない（既存の行はシートの値を残す）
+    // 見出しを最新に（通知の列を足した版）
+    writeOrExplain_(function () { sh.getRange(1, 1, 1, CHILDREN_HEADER.length).setValues([CHILDREN_HEADER]); });
     const old = sh.getDataRange().getValues().slice(1);
     out.forEach(function (r) { const o = old.filter(function (x) { return String(x[0]) === r[0]; })[0]; if (o) r[4] = o[4]; });
     writeOrExplain_(function () {
-      if (old.length) sh.getRange(2, 1, old.length, CHILDREN_HEADER.length).clearContent();
+      if (old.length) sh.getRange(2, 1, old.length, Math.max(CHILDREN_HEADER.length, old[0].length)).clearContent();
       if (out.length) sh.getRange(2, 1, out.length, CHILDREN_HEADER.length).setValues(out);
     });
   } finally {
     lock.releaseLock();
   }
   return getAdmin();
+}
+
+/** 画面から来た時刻を、刻みに合った "HH:MM" か 'off' にそろえる */
+function remindTime_(v, fallback) {
+  const t = normTime_(v, fallback);
+  if (t === 'off') return t;
+  return toMin_(t) % REMIND_STEP_MIN === 0 ? t : fallback;
 }
 
 /** LINE アカウントの「有効」を変える（親が試しに友だち追加した LINE を止める、など） */

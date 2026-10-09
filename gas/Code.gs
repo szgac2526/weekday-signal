@@ -74,33 +74,34 @@ function handleEvent_(ev) {
   if (ev.type === 'follow' && userId) {
     registerUser_(userId);
     reply_(ev.replyToken, [text_(
-      '友だち追加ありがとう！Aestus です。\nワーク「WEEKDAY SIGNAL」を、平日の朝と夜に2〜3分ずつ、自分のアンテナを立てて宝物を探そう。\n\n' +
-      '下のメニューの「朝」「夜」から書けます。正解はありません。短くてOK！'
+      'Aestus。\n平日の朝と夜に2〜3分、自分のコンディションと気づきを記録するためのアカウント。\n\n' +
+      '下のメニューの WARM-UP（朝）／COOL-DOWN（夜）から。正解はない。書けるところだけでいい。'
     ), menuButtons_()]);
     return;
   }
   if (ev.type === 'message' && ev.message && ev.message.type === 'text') {
     const t = ev.message.text || '';
     const kids = childrenForLine_(children_(), userId);
-    if (t.indexOf('【朝のチェック完了】') === 0) {
+    // 【WARM-UP】【COOL-DOWN】は入力ページが送る印。前の版の【朝のチェック完了】なども受ける
+    if (/^【(WARM-UP|朝のチェック完了)】/.test(t)) {
       const child = resolveChild_(kids, t);
       const msgs = [text_(pick_([
-        'アンテナON！いってらっしゃい。', 'いいスタート！今日のQUEST、楽しんで。', 'セット完了。見つからなくてもそれも発見だよ。',
+        'WARM-UP 完了。今日のドリル、拾いにいこう。', '記録した。いい一日を。', 'WARM-UP 完了。見つからなくても、それも記録になる。',
       ]))];
       // 夜を先に書いた日は、朝でスタンプがそろうことがある
       reply_(ev.replyToken, child ? msgs.concat(stampMessages_(child, false)) : msgs);
-    } else if (t.indexOf('【夜のチェック完了】') === 0) {
+    } else if (/^【(COOL-DOWN|夜のチェック完了)】/.test(t)) {
       const child = resolveChild_(kids, t);
       const n = child ? streak_(child.id) : 0;
       const msgs = [text_(pick_([
-        'おつかれさま！今日の宝物、ちゃんと残せたね。', 'GETでも惜しいでも、書いたことが前進。', '今日のKEY、いい言葉だね。',
-      ]) + (n >= 2 ? '\n\n連続 ' + n + ' 日目！' : ''))];
+        'COOL-DOWN 完了。おつかれ。', '記録した。今日も積み上がった。', 'COOL-DOWN 完了。結果より、書いたことが前進。',
+      ]) + (n >= 2 ? '\n' + n + '日連続。' : ''))];
       reply_(ev.replyToken, child ? msgs.concat(stampMessages_(child, true)) : msgs);
     } else if (/スタンプ|ギフト/.test(t)) {
       // 兄弟で共有している LINE なら、2人分のカードを並べる
       const ym = jstDate_(new Date()).slice(0, 7);
       const cards = kids.slice(0, 5).map(function (c) { return stampCardFlex_(monthStampsFor_(c.id, ym), c.name); });
-      reply_(ev.replyToken, cards.length ? cards : [text_('まだ名前が登録されていません。親の画面で、この LINE と名前をつなげてもらってください。')]);
+      reply_(ev.replyToken, cards.length ? cards : [text_('まだ記録する人と紐づいていない。親の画面の「子どもと LINE」で紐づけてもらって。')]);
     } else {
       reply_(ev.replyToken, [menuButtons_()]);
     }
@@ -109,17 +110,8 @@ function handleEvent_(ev) {
 
 // ---------------------------------------------------------------- スタンプとギフト
 
-// LINE が「ボットから送ってよい」と公開しているスタンプから選ぶ。
-// 1つでも番号が違うと返信が丸ごと失敗するので、reply_ は失敗したら文字だけで送り直す
-const STICKERS_DAILY = [
-  { packageId: '11537', stickerId: '52002734' }, { packageId: '11537', stickerId: '52002735' },
-  { packageId: '11538', stickerId: '51626494' }, { packageId: '11538', stickerId: '51626501' },
-  { packageId: '11539', stickerId: '52114110' },
-];
-const STICKER_GOAL = { packageId: '11537', stickerId: '52002739' };
-
 /**
- * 返信に足すもの：今月のスタンプカード。5個ごとにスタンプ（LINE の）。目標に届いた日はお祝いとギフトの予告。
+ * 返信に足すもの：今月のセッションのカード。5の倍数の節目に1行。目標に届いた日はコンプリートの知らせ。
  * 目標に届いたら gifts シートに1行足し、親に知らせる（1人1か月に1回）
  */
 function stampMessages_(child, withCard) {
@@ -129,10 +121,9 @@ function stampMessages_(child, withCard) {
   const newlyAchieved = st.achieved && recordGift_(child, st);
   if (withCard || newlyAchieved) out.push(stampCardFlex_(st, child.name));
   if (newlyAchieved) {
-    out.push(text_('🎁 ' + child.name + '、' + Number(ym.slice(5)) + '月のスタンプがぜんぶそろった！\n' + giftLabel_() + 'のプレゼントを用意するね。届くまで少し待ってて。'));
-    out.push(sticker_(STICKER_GOAL));
+    out.push(text_(child.name + '、' + Number(ym.slice(5)) + '月コンプリート（' + st.count + '/' + st.goal + '）。\nリワード（' + giftLabel_() + '）は親から届く。'));
   } else if (withCard && st.count > 0 && st.count % 5 === 0) {
-    out.push(sticker_(pick_(STICKERS_DAILY)));
+    out.push(text_('今月 ' + st.count + ' セッション。'));
   }
   return out.slice(0, 4); // 返信は最大5通。先頭の文と合わせて5以内
 }
@@ -158,24 +149,23 @@ function recordGift_(child, st) {
   // 親に知らせる（任意）。PARENT_LINE_USER_ID が無ければ親の画面で気づく
   const parent = prop_('PARENT_LINE_USER_ID');
   if (parent) {
-    push_(parent, [text_('🎁 ' + child.name + 'さんが ' + st.ym + ' のスタンプを全部そろえました（' + st.count + '/' + st.goal + '）。\n' +
-      'ギフトを贈ったら、親の画面で「贈った」を押してください。')]);
+    push_(parent, [text_(child.name + 'さんが ' + st.ym + ' をコンプリートしました（' + st.count + '/' + st.goal + '）。\n' +
+      'リワードを贈ったら、親の画面で「贈った」を押してください。')]);
   }
   return true;
 }
 
 function giftLabel_() { return settings_().giftLabel || DEFAULT_GIFT_LABEL; }
-function sticker_(s) { return { type: 'sticker', packageId: s.packageId, stickerId: s.stickerId }; }
 
 function menuButtons_() {
   const liff = prop_('LIFF_URL');
   return {
-    type: 'template', altText: '朝・夜のチェック',
+    type: 'template', altText: 'WARM-UP／COOL-DOWN',
     template: {
-      type: 'buttons', text: 'どっちを書く？',
+      type: 'buttons', text: 'どっちを記録する？',
       actions: [
-        { type: 'uri', label: '朝のチェック', uri: liff + '?slot=morning' },
-        { type: 'uri', label: '夜のチェック', uri: liff + '?slot=night' },
+        { type: 'uri', label: 'WARM-UP（朝）', uri: liff + '?slot=morning' },
+        { type: 'uri', label: 'COOL-DOWN（夜）', uri: liff + '?slot=night' },
       ],
     },
   };
@@ -225,38 +215,53 @@ function verifyIdToken_(idToken) {
 
 // ---------------------------------------------------------------- 声かけ（時間トリガー）
 
-function sendMorningReminder() { remind_('morning'); }
-function sendNightReminder() { remind_('night'); }
-
-function remind_(slot) {
-  const today = jstDate_(new Date());
-  const wd = weekdayKey_(new Date());
+/**
+ * 15分ごとに動く。子どもごとの時刻（親が画面で決める）を過ぎた声かけを送る。
+ * 時刻ごとにトリガーを作ると、子どもや時刻が変わるたびに作り直しが要るので、見回り1本にしている
+ */
+function tick() {
+  const now = new Date();
+  const wd = weekdayKey_(now);
   if (wd === 'sat' || wd === 'sun') return; // 平日だけ
-  const liff = prop_('LIFF_URL');
+  const today = jstDate_(now);
+  const nowHM = jstDateTime_(now).slice(11, 16);
+  const props = PropertiesService.getScriptProperties();
+  const key = 'remind-sent:' + today;
+  const sent = JSON.parse(props.getProperty(key) || '{}');
   const activeLines = {};
   activeUsers_().forEach(function (u) { activeLines[u.userId] = true; });
   const todays = records_().filter(function (r) { return r.date === today; });
-  // まだ書いていない子がいる LINE にだけ、1通ずつ（無料の通数を使わない）
-  remindTargets_(children_(), todays, slot).forEach(function (t) {
+  const liff = prop_('LIFF_URL');
+  const due = dueReminders_(children_(), todays, nowHM, sent);
+  due.forEach(function (t) {
+    t.childIds.forEach(function (id) { sent[id + ':' + t.slot] = true; });
     if (!activeLines[t.lineUserId]) return;
-    const who = t.names.length > 1 ? '（' + t.names.join('・') + '）' : '';
-    const msg = slot === 'morning'
-      ? '☀ おはよう！今日のアンテナを立てよう' + who + '（2〜3分）\n' + liff + '?slot=morning'
-      : '🌙 今日の宝物、見つかった？' + who + '（2〜3分）\n' + liff + '?slot=night';
+    const who = '（' + t.names.join('・') + '）';
+    const msg = t.slot === 'morning'
+      ? 'WARM-UP がまだ' + who + '。2〜3分で終わる。\n' + liff + '?slot=morning'
+      : 'COOL-DOWN がまだ' + who + '。今日を記録して締めよう。\n' + liff + '?slot=night';
     push_(t.lineUserId, [text_(msg)]);
   });
+  if (due.length) props.setProperty(key, JSON.stringify(sent));
+  // 前の日の「送った」の記録は消す（スクリプト プロパティを溜めない）
+  props.getKeys().forEach(function (k) { if (k.indexOf('remind-sent:') === 0 && k !== key) props.deleteProperty(k); });
 }
 
-/** 最初に1回だけ実行する：シートの用意と、朝・夜の時間トリガー */
+// 以前の時刻固定のトリガー（7時・21時）が残っていても動くように。setup をやり直すと使われなくなる
+function sendMorningReminder() { tick(); }
+function sendNightReminder() { tick(); }
+
+/** 最初に1回だけ実行する：シートの用意と、15分ごとの見回りのトリガー（やり直しても大丈夫） */
 function setup() {
   sheet_(SHEET_RECORDS, HEADER_JA);
   sheet_(SHEET_USERS, USERS_HEADER);
   sheet_(SHEET_CHILDREN, CHILDREN_HEADER);
   sheet_(SHEET_GIFTS, GIFTS_HEADER);
   sheet_(SHEET_SETTINGS, SETTINGS_HEADER);
+  // children シートの見出しを最新に（通知の列を足した版）。中身の行には触らない
+  sheet_(SHEET_CHILDREN, CHILDREN_HEADER).getRange(1, 1, 1, CHILDREN_HEADER.length).setValues([CHILDREN_HEADER]);
   ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
-  ScriptApp.newTrigger('sendMorningReminder').timeBased().everyDays(1).atHour(7).inTimezone('Asia/Tokyo').create();
-  ScriptApp.newTrigger('sendNightReminder').timeBased().everyDays(1).atHour(21).inTimezone('Asia/Tokyo').create();
+  ScriptApp.newTrigger('tick').timeBased().everyMinutes(REMIND_STEP_MIN).create();
 }
 
 // ---------------------------------------------------------------- シート
@@ -357,9 +362,10 @@ function sheet_(name, header) {
 
 
 /**
- * 今月のスタンプカード（LINE の Flex メッセージ）。平日を週ごとに5列で並べ、押した日に ★
+ * 今月のセッションのカード（LINE の Flex メッセージ）。黒地に、平日を週ごとに5列。朝夜そろった日を塗る
  * Google のサービスを呼ばない（tests/ で形を確かめている）
  */
+const CARD = { bg: '#12151A', cell: '#1F242C', on: '#F3F5F8', onText: '#0A0C0F', text: '#F3F5F8', muted: '#8E97A5', dim: '#5D6674' };
 function stampCardFlex_(st, name) {
   const set = {};
   st.stamped.forEach(function (d) { set[d] = true; });
@@ -375,31 +381,32 @@ function stampCardFlex_(st, name) {
     if (!d) return { type: 'box', layout: 'vertical', flex: 1, contents: [{ type: 'filler' }] };
     const on = set[d];
     return {
-      type: 'box', layout: 'vertical', flex: 1, paddingAll: '4px', cornerRadius: '8px',
-      backgroundColor: on ? '#FDE8EC' : (d > today ? '#FFFFFF' : '#F3F4F6'),
-      contents: [
-        { type: 'text', text: on ? '★' : '・', align: 'center', size: 'lg', color: on ? '#E8798A' : '#C0C4CC' },
-        { type: 'text', text: String(Number(d.slice(8))), align: 'center', size: 'xxs', color: '#6B7280' },
-      ],
+      type: 'box', layout: 'vertical', flex: 1, paddingAll: '6px', cornerRadius: '4px',
+      backgroundColor: on ? CARD.on : CARD.cell,
+      contents: [{ type: 'text', text: String(Number(d.slice(8))), size: 'xxs', weight: 'bold', color: on ? CARD.onText : (d > today ? CARD.dim : CARD.muted) }],
     };
   };
-  const head = ['月', '火', '水', '木', '金'].map(function (w) { return { type: 'text', text: w, flex: 1, align: 'center', size: 'xs', color: '#6B7280' }; });
+  const head = ['M', 'T', 'W', 'T', 'F'].map(function (w) { return { type: 'text', text: w, flex: 1, align: 'center', size: 'xxs', weight: 'bold', color: CARD.dim }; });
   const rows = weeks.map(function (w) {
     return { type: 'box', layout: 'horizontal', spacing: '4px', contents: ['mon', 'tue', 'wed', 'thu', 'fri'].map(function (k) { return cell(w[k]); }) };
   });
   const left = Math.max(0, st.goal - st.count);
   return {
-    type: 'flex', altText: (name ? name + ' ' : '') + '今月のスタンプ ' + st.count + '/' + st.goal,
+    type: 'flex', altText: (name ? name + ' ' : '') + '今月のセッション ' + st.count + '/' + st.goal,
     contents: {
       type: 'bubble', size: 'kilo',
       body: {
-        type: 'box', layout: 'vertical', spacing: '6px',
+        type: 'box', layout: 'vertical', spacing: '6px', backgroundColor: CARD.bg,
         contents: [
-          { type: 'text', text: (name ? name + '　' : '') + Number(st.ym.slice(5)) + '月のスタンプ', weight: 'bold', size: 'md', wrap: true },
-          { type: 'text', text: st.count + ' / ' + st.goal + (st.achieved ? '　🎁 達成！' : '　あと ' + left + ' 個で 🎁'), size: 'sm', color: st.achieved ? '#E8798A' : '#6B7280' },
+          { type: 'text', text: ((name ? name + ' · ' : '') + Number(st.ym.slice(5)) + '月のセッション').toUpperCase(), size: 'xxs', weight: 'bold', color: CARD.muted, wrap: true },
+          { type: 'box', layout: 'baseline', spacing: '4px', contents: [
+            { type: 'text', text: String(st.count), size: '3xl', weight: 'bold', color: CARD.text, flex: 0 },
+            { type: 'text', text: '/ ' + st.goal, size: 'md', color: CARD.muted, flex: 0 },
+          ] },
+          { type: 'text', text: st.achieved ? 'コンプリート' : 'コンプリートまで残り ' + left, size: 'xs', color: CARD.muted },
           { type: 'box', layout: 'horizontal', spacing: '4px', margin: 'md', contents: head },
         ].concat(rows).concat([
-          { type: 'text', text: '朝と夜の両方を書いた日に ★', size: 'xxs', color: '#9CA3AF', margin: 'md', wrap: true },
+          { type: 'text', text: '朝と夜の両方で1セッション', size: 'xxs', color: CARD.dim, margin: 'md', wrap: true },
         ]),
       },
     },

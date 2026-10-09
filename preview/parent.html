@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <base target="_top">
-<title>Aestus 親の画面</title>
+<title>Aestus-parent</title>
 <style>
 /* 上から「いま何が要るか」順：ギフト → 今月の数字 → スタンプ → 調子の推移 → よく出た言葉 → 毎日の記録 */
 :root {
@@ -87,8 +87,8 @@ textarea { resize: vertical; line-height: 1.5; }
 .chk { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; min-height: 36px; margin-right: 16px; }
 .row { display: flex; flex-wrap: wrap; }
 .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 12px; }
-.kidrow { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(160px, 1.4fr) auto; gap: 0 12px; align-items: end; border-bottom: 1px solid var(--line); padding-top: 8px; }
-@media (max-width: 560px) { .kidrow { grid-template-columns: 1fr; } }
+.kidrow { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(150px, 1.3fr) minmax(96px, .7fr) minmax(96px, .7fr) auto; gap: 0 12px; align-items: end; border-bottom: 1px solid var(--line); padding-top: 8px; }
+@media (max-width: 560px) { .kidrow { grid-template-columns: 1fr 1fr; } .kidrow > label:nth-child(-n+2), .kidrow > .chk { grid-column: 1 / -1; } }
 .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 12px; }
 .actions.sticky { position: sticky; bottom: 8px; margin: 0; }
 button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; padding: 6px 20px; }
@@ -293,16 +293,25 @@ button.primary { background: var(--accent); color: #fff; border-color: var(--acc
   const flashBox = `<p id="flash" class="flash" role="status" hidden></p>`;
 
   function kidsTab() {
+    // 通知の時刻は 5:00〜23:45 を刻みごとに選ぶ。「通知しない」も選べる
+    const times = [];
+    for (let m = 5 * 60; m < 24 * 60; m += A.remindStep || 15) times.push(String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"));
+    const timeSel = (name, value, label) => `<label class="f"><span>${label}</span><select name="${name}">
+        <option value="off"${value === "off" ? " selected" : ""}>通知しない</option>
+        ${times.map((t) => `<option value="${t}"${t === value ? " selected" : ""}>${t}</option>`).join("")}</select></label>`;
     const row = (c, i) => `<div class="kidrow" data-i="${i}" data-id="${esc(c.id || "")}">
         <label class="f"><span>名前</span><input type="text" name="name" value="${esc(c.name)}" maxlength="20" placeholder="例：たかまさ"></label>
         <label class="f"><span>書くときの LINE</span><select name="line"><option value="">（まだつながない）</option>
           ${A.lines.map((l) => `<option value="${esc(l.id)}"${l.id === c.lineUserId ? " selected" : ""}>${esc(l.name || "（名前なし）")}${l.active ? "" : "（止めている）"}</option>`).join("")}</select></label>
+        ${timeSel("morning", c.morningAt || A.defaultRemind.morning, "朝の通知")}
+        ${timeSel("night", c.nightAt || A.defaultRemind.night, "夜の通知")}
         <label class="chk"><input type="checkbox" name="active"${c.active !== false ? " checked" : ""}> 使う</label>
       </div>`;
     const linked = (id) => A.children.filter((c) => c.lineUserId === id).map((c) => c.name);
     shell(`${flashBox}<div class="card"><h2>子ども</h2>
-        <p class="note">名前は LINE のメッセージやスタンプカードに出ます。<b>兄弟で1つの LINE を使うなら、2人とも同じ LINE を選んでください。</b>入力ページの上に「書く人」が出て、切り替えて書けます。<br>
-        使わなくなった子は「使う」を外します（記録は残ります。消す操作はありません）。</p>
+        <p class="note">名前は LINE のメッセージやセッションのカードに出ます。<b>兄弟で1つの LINE を使うなら、2人とも同じ LINE を選んでください。</b>入力ページの上に「RECORDING AS」（記録する人）が出て、切り替えて書けます。<br>
+        使わなくなった子は「使う」を外します（記録は残ります。消す操作はありません）。<br>
+        <b>通知</b>は平日だけ、その時刻までに書いていなければ届きます（15分ほど遅れることがあります）。兄弟で同じ LINE・同じ時刻なら1通にまとまります。</p>
         <div id="kidrows">${(A.children.length ? A.children : [{ name: "", active: true }]).map(row).join("")}</div>
         <div class="actions"><button type="button" id="addkid">＋ 子どもを足す</button><button type="button" class="primary" id="savekids">保存</button></div></div>
       <div class="card"><h2>友だち追加された LINE</h2>
@@ -320,6 +329,7 @@ button.primary { background: var(--accent); color: #fff; border-color: var(--acc
       const list = [...document.querySelectorAll(".kidrow")].map((r) => ({
         id: r.dataset.id || undefined, name: r.querySelector("[name=name]").value,
         lineUserId: r.querySelector("[name=line]").value, active: r.querySelector("[name=active]").checked,
+        morningAt: r.querySelector("[name=morning]").value, nightAt: r.querySelector("[name=night]").value,
       }));
       save(ev.target, "saveChildren", [list], "保存しました。");
     };

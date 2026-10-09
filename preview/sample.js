@@ -1,8 +1,8 @@
 // 親の画面の見本データ（Google につながずに見た目を確かめる用）。google.script.run の代わりに呼ばれる
 (function () {
   const KIDS = [
-    { id: "c1", name: "たかまさ", active: true, lineUserId: "LA" },
-    { id: "c2", name: "ゆうま", active: true, lineUserId: "LA" },
+    { id: "c1", name: "たかまさ", active: true, lineUserId: "LA", morningAt: "06:45", nightAt: "21:30" },
+    { id: "c2", name: "ゆうま", active: true, lineUserId: "LA", morningAt: "07:15", nightAt: "off" },
   ];
   const LINES = [
     { id: "LA", name: "たかまさ📱", active: true, since: "2026-10-03 19:20" },
@@ -47,7 +47,8 @@
 
   function admin() {
     return { viewer: "parent@example.com", sheetUrl: "#", children: KIDS, lines: LINES, questions: questions(), customized: custom,
-      defaults: window.SAMPLE_QUESTIONS, stampGoal: goal, giftLabel: label, defaultGiftLabel: "1,000円分" };
+      defaults: window.SAMPLE_QUESTIONS, stampGoal: goal, giftLabel: label, defaultGiftLabel: "1,000円分",
+      defaultRemind: { morning: "07:00", night: "21:00" }, remindStep: 15 };
   }
 
   window.SAMPLE = function (fn, ...args) {

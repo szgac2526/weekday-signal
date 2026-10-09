@@ -1,9 +1,9 @@
 // Code.gs の「純粋な処理」を Node で確かめる（Google のサービスは使わない部分だけ）
 const fs = require("fs"), vm = require("vm"), assert = require("assert");
 const ctx = {}; vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(__dirname + "/../gas/Shared.gs", "utf8") + fs.readFileSync(__dirname + "/../gas/Code.gs", "utf8") + "\nthis.api={buildRow_,countStreak_,jstDate_,weekdayKey_,COLUMNS,HEADER_JA,monthStamps_,monthWeekdays_,doneDates_,stampCardFlex_,normalizeQuestions_,parseSettings_,DEFAULT_QUESTIONS,childrenFromRows_,childrenForLine_,resolveChild_,remindTargets_,newChildId_};", ctx);
+vm.runInContext(fs.readFileSync(__dirname + "/../gas/Shared.gs", "utf8") + fs.readFileSync(__dirname + "/../gas/Code.gs", "utf8") + "\nthis.api={buildRow_,countStreak_,jstDate_,weekdayKey_,COLUMNS,HEADER_JA,monthStamps_,monthWeekdays_,doneDates_,stampCardFlex_,normalizeQuestions_,parseSettings_,DEFAULT_QUESTIONS,childrenFromRows_,childrenForLine_,resolveChild_,dueReminders_,normTime_,newChildId_};", ctx);
 const { buildRow_, countStreak_, jstDate_, weekdayKey_, COLUMNS, HEADER_JA, monthStamps_, monthWeekdays_, doneDates_, stampCardFlex_, normalizeQuestions_, parseSettings_, DEFAULT_QUESTIONS,
-  childrenFromRows_, childrenForLine_, resolveChild_, remindTargets_, newChildId_ } = ctx.api;
+  childrenFromRows_, childrenForLine_, resolveChild_, dueReminders_, normTime_, newChildId_ } = ctx.api;
 const user = { id: "c1", name: "たかまさ" };
 // vm の中で作った配列・オブジェクトは deepStrictEqual で別物扱いになるので、JSON で比べる
 const same = (a, b) => assert.deepStrictEqual(JSON.parse(JSON.stringify(a)), JSON.parse(JSON.stringify(b)));
@@ -55,13 +55,13 @@ t("目標を指定できる。平日の数より大きい指定は平日の数�
   assert.strictEqual(monthStamps_(dates, "2026-10", "20").achieved, true);
   assert.strictEqual(monthStamps_(dates, "2026-10", "99").goal, 22);
 });
-t("スタンプカードは週ごとに5列、押した日に ★、代替テキストに数", () => {
+t("セッションのカードは週ごとに5列、朝夜そろった日を塗る、代替テキストに数", () => {
   const st = monthStamps_(["2026-10-01", "2026-10-02"], "2026-10", "");
   const f = stampCardFlex_(st);
-  assert.strictEqual(f.altText, "今月のスタンプ 2/22");
+  assert.strictEqual(f.altText, "今月のセッション 2/22");
   const rows = f.contents.body.contents.filter((c) => c.type === "box" && c.contents.length === 5 && c.contents[0].type === "box");
   assert.strictEqual(rows.length, 5); // 10月は5週にまたがる
-  const json = JSON.stringify(f); assert.strictEqual((json.match(/★/g) || []).length, 2 + 1); // ★2個 ＋ 説明文の★
+  const json = JSON.stringify(f); assert.strictEqual((json.match(/"backgroundColor":"#F3F5F8"/g) || []).length, 2);
 });
 t("Shared.gs はボットと親の画面で同じ中身（片方だけ直すと数え方が食い違う）", () => {
   assert.strictEqual(fs.readFileSync(__dirname + "/../gas/Shared.gs", "utf8"), fs.readFileSync(__dirname + "/../gas-parent/Shared.gs", "utf8"));
@@ -104,17 +104,31 @@ t("「完了」メッセージの1行目の名前で子を決める。1人の LI
   assert.strictEqual(resolveChild_(la, "【夜のチェック完了】\n結果：GET!"), null);
   assert.strictEqual(resolveChild_(lb, "【朝のチェック完了】\n体3").id, "c4");
 });
-t("声かけは LINE 1つに1通。書いた子は外し、全員書いた LINE には送らない", () => {
-  const today = [{ child_id: "c1", morning_at: "x", night_at: "" }, { child_id: "c4", morning_at: "x", night_at: "" }];
-  same(remindTargets_(kids, today, "morning"), [{ lineUserId: "LA", names: ["ゆうま"] }]);
-  same(remindTargets_(kids, today, "night"), [{ lineUserId: "LA", names: ["たかまさ", "ゆうま"] }, { lineUserId: "LB", names: ["別の携帯"] }]);
+t("通知の時刻：空は初期値、off は通知しない、シートが時刻型にしたものも読める", () => {
+  assert.strictEqual(normTime_("", "07:00"), "07:00"); assert.strictEqual(normTime_("off", "07:00"), "off");
+  assert.strictEqual(normTime_("6:45", "07:00"), "06:45"); assert.strictEqual(normTime_("25:00", "07:00"), "07:00");
+  assert.strictEqual(normTime_(new Date(1899, 11, 30, 21, 30), "21:00"), "21:30");
+  const k = childrenFromRows_([["c1", "a", true, "L", "", "", "off"]])[0];
+  assert.strictEqual(k.morningAt, "07:00"); assert.strictEqual(k.nightAt, "off");
+});
+t("通知は子どもごとの時刻で。過ぎて3時間以内・未記入・未送信のものだけ。同じ LINE・同じ時間帯は1通", () => {
+  const ks = childrenFromRows_([
+    ["c1", "たかまさ", true, "LA", "", "06:45", "21:30"], ["c2", "ゆうま", true, "LA", "", "06:45", "off"],
+    ["c3", "別の携帯", true, "LB", "", "07:30", "21:00"], ["c4", "止めた子", false, "LA", "", "06:00", "21:00"],
+  ]);
+  same(dueReminders_(ks, [], "06:44", {}), []);
+  same(dueReminders_(ks, [], "07:00", {}), [{ lineUserId: "LA", slot: "morning", names: ["たかまさ", "ゆうま"], childIds: ["c1", "c2"] }]);
+  same(dueReminders_(ks, [{ child_id: "c1", morning_at: "x" }], "07:45", {}).map((t) => t.names.join()), ["ゆうま", "別の携帯"]);
+  same(dueReminders_(ks, [], "07:45", { "c1:morning": true, "c2:morning": true }).map((t) => t.lineUserId), ["LB"]);
+  same(dueReminders_(ks, [], "10:00", {}).map((t) => t.lineUserId), ["LB"]); // たかまさ・ゆうまは 6:45 から3時間を過ぎた
+  same(dueReminders_(ks, [], "21:30", {}).map((t) => t.names.join()), ["たかまさ", "別の携帯"]); // ゆうまの夜は off
 });
 t("子IDは名前と関係なく c1, c2, … で増える", () => {
   assert.strictEqual(newChildId_(kids), "c5"); assert.strictEqual(newChildId_([]), "c1");
 });
 t("スタンプカードに名前が載る（兄弟で共有の LINE で見分けるため）", () => {
   const f = stampCardFlex_(monthStamps_([], "2026-10", ""), "ゆうま");
-  assert.strictEqual(f.altText, "ゆうま 今月のスタンプ 0/22");
+  assert.strictEqual(f.altText, "ゆうま 今月のセッション 0/22");
 });
 t("見本の画面の設問（preview/questions.sample.js）も同じ中身", () => {
   const c = {}; vm.createContext(c); c.window = c;
